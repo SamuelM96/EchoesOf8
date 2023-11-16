@@ -3,12 +3,12 @@
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
-void hexdump(void *buffer, size_t length) {
-	printf("00000000: ");
-	for (int i = 0; i < length; ++i) {
+void hexdump(void *buffer, size_t length, size_t base) {
+	printf("%08zx: ", base);
+	for (size_t i = 0; i < length; ++i) {
 		printf("%02hhx", ((char *)buffer)[i]);
 		if ((i + 1) % 16 == 0) {
-			printf("\n%08d: ", i + 1);
+			printf("\n%08zx: ", base + i + 1);
 		} else if ((i + 1) % 2 == 0) {
 			printf(" ");
 		}
@@ -26,14 +26,13 @@ void parse_rom(char *rom_path) {
 
 	char buffer[1024];
 
-	size_t ret = fread(buffer, sizeof(*buffer), ARRAY_SIZE(buffer), rom);
-	if (ret == 0) {
-		fprintf(stderr, "Reading ROM failed");
-		exit(EXIT_FAILURE);
+	printf("ROM dump\n");
+	size_t ret, base;
+	while ((ret = fread(buffer, sizeof(*buffer), ARRAY_SIZE(buffer),
+			    rom))) {
+		hexdump(buffer, ret, base);
+		base += ret;
 	}
-
-	printf("ROM dump (%zu bytes):\n", ret);
-	hexdump(buffer, ret);
 }
 
 int main(int argc, char *argv[]) {
