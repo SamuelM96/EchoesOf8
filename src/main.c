@@ -1,3 +1,10 @@
+/*
+ *   References:
+ *    - https://github.com/mattmikolay/chip-8/wiki/CHIP%E2%80%908-Instruction-Set
+ *    - http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
+ *    - https://github.com/Timendus/chip8-test-suite
+ */
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,12 +26,12 @@ void hexdump(void *buffer, size_t length, size_t base) {
 	printf("\n");
 }
 
-// Linear sweep
-void disassemble_linear(uint8_t *code, size_t length, size_t base) {
-	// References:
-	// - https://github.com/mattmikolay/chip-8/wiki/CHIP%E2%80%908-Instruction-Set
-	// - http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
+// Recursive descent disassembler
+void disassemble_rd(uint8_t *code, size_t length, size_t base) {
+}
 
+// Linear sweep disassembler
+void disassemble_linear(uint8_t *code, size_t length, size_t base) {
 	if (length % 2 != 0) {
 		fprintf(stderr, "Cannot disassemble code: not aligned to 2 bytes");
 		return;
