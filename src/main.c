@@ -1,10 +1,3 @@
-/*
- *   References:
- *    - https://github.com/mattmikolay/chip-8/wiki/CHIP%E2%80%908-Instruction-Set
- *    - http://devernay.free.fr/hacks/chip8/C8TECH10.HTM
- *    - https://github.com/Timendus/chip8-test-suite
- */
-
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
