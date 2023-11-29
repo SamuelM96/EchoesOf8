@@ -9,6 +9,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#define STB_DS_IMPLEMENTATION
+#include "../lib/stb_ds.h"
+
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 
 #define PROG_BASE 0x200
