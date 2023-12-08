@@ -18,15 +18,21 @@ void parse_rom(char *rom_path) {
 	uint8_t *buffer;
 	buffer = malloc(file_size);
 
-	printf("ROM dump\n");
 	size_t ret, base = PROG_BASE;
 	while ((ret = fread(buffer, sizeof(*buffer), file_size, rom))) {
-		// hexdump(buffer, ret, base);
-		// disassemble_linear(buffer, ret, base);
+		printf("========== HEXDUMP ==========\n");
+		hexdump(buffer, ret, base);
+
+		printf("\n\n========== LINEAR SWEEP ==========\n");
+		disassemble_linear(buffer, ret, base);
 
 		// TODO: Let disassemble functions stream in data
 		// There could be a JMP outside the current chunk that won't be handled well
+		// NOTE: Actually, only linear sweep could do that.
+		// Recursive descent could return unresolved addresses that could be parsed later?
+		printf("\n\n========== RECURSIVE DESCENT ==========\n");
 		disassemble_rd(buffer, ret, base);
+
 		base += ret;
 	}
 

@@ -9,6 +9,7 @@
 #include "../lib/stb_ds.h"
 
 void hexdump(void *buffer, size_t length, size_t base) {
+	// TODO: Print ASCII too
 	printf("%08zx: ", base);
 	for (size_t i = 0; i < length; ++i) {
 		printf("%02hhx", ((char *)buffer)[i]);
