@@ -14,6 +14,10 @@
 // Instruction size = 2 bytes (big endian)
 #define INST(code, addr) (((code)[(addr)] << 8) | (code)[(addr) + 1])
 
+typedef struct {
+	size_t key;
+} set_val;
+
 void hexdump(void *buffer, size_t length, size_t base) {
 	printf("%08zx: ", base);
 	for (size_t i = 0; i < length; ++i) {
@@ -181,7 +185,7 @@ void disassemble_rd(uint8_t *code, size_t length, size_t base) {
 	}
 
 	size_t *queue = NULL;
-	size_t *processed = NULL;
+	set_val *processed = NULL;
 	arrput(queue, 0); // Entry point
 
 	while (arrlen(queue)) {
@@ -191,7 +195,7 @@ void disassemble_rd(uint8_t *code, size_t length, size_t base) {
 		printf("===== BLOCK @ 0x%08zx =====\n", ip + PROG_BASE);
 
 		while (ip < length) {
-			arrput(processed, ip);
+			hmputs(processed, (set_val){ ip });
 			uint16_t instruction = INST(code, ip);
 			printf("0x%08zx  %04hx    ", base + ip, instruction);
 
@@ -203,16 +207,8 @@ void disassemble_rd(uint8_t *code, size_t length, size_t base) {
 
 			uint8_t inst_type = instruction >> 12;
 			if (inst_type == 1) { // JMP addr
-				// PERF: Better way to check? Sorted array + binary search?
 				uint16_t addr = instruction & 0xfff - PROG_BASE;
-				bool should_process = true;
-				for (size_t i = 0; i < arrlen(processed); ++i) {
-					if (processed[i] == addr) {
-						should_process = false;
-						break;
-					}
-				}
-				if (should_process) {
+				if (!hmgets(processed, addr).key && addr != 0) {
 					arrput(queue, addr);
 				}
 				break;
@@ -221,16 +217,8 @@ void disassemble_rd(uint8_t *code, size_t length, size_t base) {
 				// - can't disassemble unknown address
 				break;
 			} else if (inst_type == 0x2) { // CALL addr
-				// TODO: Refactor as per JMP instruction
 				uint16_t addr = instruction & 0xfff - PROG_BASE;
-				bool should_process = true;
-				for (size_t i = 0; i < arrlen(processed); ++i) {
-					if (processed[i] == addr) {
-						should_process = false;
-						break;
-					}
-				}
-				if (should_process) {
+				if (!hmgets(processed, addr).key && addr != 0) {
 					arrput(queue, addr);
 				}
 			}
@@ -241,7 +229,7 @@ void disassemble_rd(uint8_t *code, size_t length, size_t base) {
 	}
 
 	arrfree(queue);
-	arrfree(processed);
+	hmfree(processed);
 }
 
 // Linear sweep disassembler
