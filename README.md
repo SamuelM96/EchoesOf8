@@ -1,4 +1,15 @@
 # EchoesOf8 - A CHIP-8 Emulator
+
+## Usage
+
+```bash
+# Build the project
+./build.sh
+
+# Run the emulator
+./build/eo8 <rom>
+```
+
 ## Acknowledgements
 
 - Test ROM from [corax89/chip8-test-rom](https://github.com/corax89/chip8-test-rom)
