@@ -2,12 +2,14 @@
 #include "disassembler.h"
 
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
-void parse_rom(char *rom_path) {
+uint8_t *read_rom(char *rom_path, size_t *out_size) {
 	FILE *rom = fopen(rom_path, "rb");
 
 	if (rom == NULL) {
-		fprintf(stderr, "Error opening ROM file");
+		fprintf(stderr, "Error opening ROM file\n");
 		exit(EXIT_FAILURE);
 	}
 
@@ -17,36 +19,83 @@ void parse_rom(char *rom_path) {
 
 	uint8_t *buffer;
 	buffer = malloc(file_size);
-
-	size_t ret, base = PROG_BASE;
-	while ((ret = fread(buffer, sizeof(*buffer), file_size, rom))) {
-		printf("========== HEXDUMP ==========\n");
-		hexdump(buffer, ret, base);
-
-		printf("\n\n========== LINEAR SWEEP ==========\n");
-		disassemble_linear(buffer, ret, base);
-
-		// TODO: Let disassemble functions stream in data
-		// There could be a JMP outside the current chunk that won't be handled well
-		// NOTE: Actually, only linear sweep could do that.
-		// Recursive descent could return unresolved addresses that could be parsed later?
-		printf("\n\n========== RECURSIVE DESCENT ==========\n");
-		disassemble_rd(buffer, ret, base);
-
-		base += ret;
-	}
+	fread(buffer, sizeof(*buffer), file_size, rom);
 
 	fclose(rom);
-	free(buffer);
+
+	*out_size = file_size;
+	return buffer;
+}
+
+void print_usage() {
+	printf("Usage: eo8 <command> <rom>\n\n");
+	printf("    <rom>                         Compiled CHIP-8 binary ROM\n\n");
+	printf("Commands:\n");
+	printf("    hexdump <rom>                 Outputs a hexdump of the ROM\n");
+	printf("    disassemble <method> <rom>    Disassembles the ROM using the selected method\n");
+	printf("                                    Methods:\n");
+	printf("                                      - linear       Linear sweep\n");
+	printf("                                      - recursive    Recursive descent\n");
+	printf("    assessmble <asm> <rom>        Assessmbles the given assembly code into a CHIP-8 ROM\n");
+	printf("    compile <source> <rom>        Compiles the given source code into a CHIP-8 ROM\n");
+	printf("    emulate <rom>                 Emulates the ROM\n");
 }
 
 int main(int argc, char *argv[]) {
-	if (argc != 2) {
-		printf("Usage: eo8 <rom>\n");
+	size_t buffer_size;
+	uint8_t *buffer = NULL;
+
+	if (argc < 2) {
+		print_usage();
+		return EXIT_FAILURE;
+	} else if (strcmp(argv[1], "hexdump") == 0) {
+		if (argc != 3) {
+			print_usage();
+			return EXIT_FAILURE;
+		}
+		buffer = read_rom(argv[2], &buffer_size);
+		hexdump(buffer, buffer_size, PROG_BASE);
+	} else if (strcmp(argv[1], "disassemble") == 0) {
+		if (argc != 4) {
+			print_usage();
+			return EXIT_FAILURE;
+		}
+		if (strcmp(argv[2], "linear") == 0) {
+			buffer = read_rom(argv[3], &buffer_size);
+			disassemble_linear(buffer, buffer_size, PROG_BASE);
+		} else if (strcmp(argv[2], "recursive") == 0) {
+			buffer = read_rom(argv[3], &buffer_size);
+			disassemble_rd(buffer, buffer_size, PROG_BASE);
+		}
+	} else if (strcmp(argv[1], "assemble") == 0) {
+		if (argc != 4) {
+			print_usage();
+			return EXIT_FAILURE;
+		}
+		printf("!!! NOT IMPLEMENTED !!!\n");
+		return EXIT_FAILURE;
+	} else if (strcmp(argv[1], "compile") == 0) {
+		if (argc != 4) {
+			print_usage();
+			return EXIT_FAILURE;
+		}
+		printf("!!! NOT IMPLEMENTED !!!\n");
+		return EXIT_FAILURE;
+	} else if (strcmp(argv[1], "emulate") == 0) {
+		if (argc != 3) {
+			print_usage();
+			return EXIT_FAILURE;
+		}
+		printf("!!! NOT IMPLEMENTED !!!\n");
+		return EXIT_FAILURE;
+	} else {
+		print_usage();
 		return EXIT_FAILURE;
 	}
 
-	parse_rom(argv[1]);
+	if (buffer) {
+		free(buffer);
+	}
 
 	return EXIT_SUCCESS;
 }
