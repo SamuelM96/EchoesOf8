@@ -54,7 +54,7 @@ int main(int argc, char *argv[]) {
 			return EXIT_FAILURE;
 		}
 		buffer = read_rom(argv[2], &buffer_size);
-		hexdump(buffer, buffer_size, PROG_BASE);
+		hexdump(buffer, buffer_size, 0);
 	} else if (strcmp(argv[1], "disassemble") == 0) {
 		if (argc != 4) {
 			print_usage();
