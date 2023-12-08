@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,15 +10,21 @@
 #include "../lib/stb_ds.h"
 
 void hexdump(void *buffer, size_t length, size_t base) {
-	// TODO: Print ASCII too
+	char ascii[17] = { 0 };
 	printf("%08zx: ", base);
 	for (size_t i = 0; i < length; ++i) {
-		printf("%02hhx", ((char *)buffer)[i]);
+		char byte = ((char *)buffer)[i];
+		printf("%02hhx", byte);
 		if ((i + 1) % 16 == 0) {
-			printf("\n%08zx: ", base + i + 1);
+			printf("  %s\n", ascii);
+			printf("%08zx: ", base + i + 1);
 		} else if ((i + 1) % 2 == 0) {
 			printf(" ");
 		}
+		if (!isprint(byte)) {
+			byte = '.';
+		}
+		ascii[i % 16] = byte;
 	}
 	printf("\n");
 }
