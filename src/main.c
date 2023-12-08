@@ -11,11 +11,16 @@ void parse_rom(char *rom_path) {
 		exit(EXIT_FAILURE);
 	}
 
-	uint8_t buffer[4096];
+	fseek(rom, 0, SEEK_END);
+	size_t file_size = ftell(rom);
+	rewind(rom);
+
+	uint8_t *buffer;
+	buffer = malloc(file_size);
 
 	printf("ROM dump\n");
 	size_t ret, base = PROG_BASE;
-	while ((ret = fread(buffer, sizeof(*buffer), ARRAY_SIZE(buffer), rom))) {
+	while ((ret = fread(buffer, sizeof(*buffer), file_size, rom))) {
 		// hexdump(buffer, ret, base);
 		// disassemble_linear(buffer, ret, base);
 
@@ -24,6 +29,9 @@ void parse_rom(char *rom_path) {
 		disassemble_rd(buffer, ret, base);
 		base += ret;
 	}
+
+	fclose(rom);
+	free(buffer);
 }
 
 int main(int argc, char *argv[]) {
