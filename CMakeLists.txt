@@ -4,6 +4,7 @@ project(eo8)
 
 set(CMAKE_CXX_STANDARD 11)
 
-add_executable(eo8 src/main.c)
+add_executable(eo8  src/main.c
+                    src/disassembler.c)
 
 include(GNUInstallDirs)
