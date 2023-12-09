@@ -19,7 +19,9 @@ void hexdump(void *buffer, size_t length, size_t base) {
 		printf("%02hhx", byte);
 		if ((i + 1) % 16 == 0) {
 			printf("  %s\n", ascii);
-			printf("%08zx: ", base + i + 1);
+			if (i + 1 != length) {
+				printf("%08zx: ", base + i + 1);
+			}
 		} else if ((i + 1) % 2 == 0) {
 			printf(" ");
 		}
@@ -28,7 +30,17 @@ void hexdump(void *buffer, size_t length, size_t base) {
 		}
 		ascii[i % 16] = byte;
 	}
-	printf("\n");
+
+	size_t whitespace_needed = 16 - (length % 16);
+	if (whitespace_needed != 16) {
+		for (size_t i = 0; i < whitespace_needed; ++i) {
+			printf("  ");
+			if ((i + 1) % 2 == 0) {
+				printf(" ");
+			}
+		}
+		printf(" %s\n", ascii);
+	}
 }
 
 void print_instruction(Chip8Instruction instruction, Chip8InstructionFormat format) {
