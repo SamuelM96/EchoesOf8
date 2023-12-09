@@ -214,6 +214,7 @@ void disassemble_rd(uint8_t *code, size_t length, size_t base) {
 	set_val *processed = NULL;
 	arrput(queue, 0); // Entry point
 
+	// First pass to discover instructions using standard recursive descent
 	while (arrlen(queue)) {
 		size_t ip = queue[0];
 		arrdel(queue, 0);
@@ -254,6 +255,21 @@ void disassemble_rd(uint8_t *code, size_t length, size_t base) {
 	}
 
 	arrfree(queue);
+
+	// Second pass to discover data blocks based on unparsed sections
+	size_t data_start = -1;
+	for (size_t ip = 2; ip < length; ip += 2) {
+		bool wasProcessed = hmgets(processed, ip).key;
+		if (!wasProcessed && data_start == -1) {
+			data_start = ip;
+		} else if (wasProcessed && data_start != -1) {
+			printf("==== DATA @ 0x%08zx =====\n", ip);
+			size_t data_len = ip - data_start;
+			hexdump(code + data_start, data_len, data_start);
+			data_start = -1;
+		}
+	}
+
 	hmfree(processed);
 }
 
