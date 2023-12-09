@@ -16,6 +16,12 @@ void hexdump(void *buffer, size_t length, size_t base) {
 	printf("%08zx: ", base);
 	for (size_t i = 0; i < length; ++i) {
 		char byte = ((char *)buffer)[i];
+		if (isprint(byte)) {
+			ascii[i % 16] = byte;
+		} else {
+			ascii[i % 16] = '.';
+		}
+
 		printf("%02hhx", byte);
 		if ((i + 1) % 16 == 0) {
 			printf("  %s\n", ascii);
@@ -25,10 +31,6 @@ void hexdump(void *buffer, size_t length, size_t base) {
 		} else if ((i + 1) % 2 == 0) {
 			printf(" ");
 		}
-		if (!isprint(byte)) {
-			byte = '.';
-		}
-		ascii[i % 16] = byte;
 	}
 
 	size_t whitespace_needed = 16 - (length % 16);
@@ -38,6 +40,7 @@ void hexdump(void *buffer, size_t length, size_t base) {
 			if ((i + 1) % 2 == 0) {
 				printf(" ");
 			}
+			ascii[15 - i] = ' ';
 		}
 		printf(" %s\n", ascii);
 	}
