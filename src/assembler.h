@@ -1,7 +1,7 @@
 #ifndef ASSEMBLER_H
 #define ASSEMBLER_H
 
-#include <stdlib.h>
+#include <stdint.h>
 
 uint8_t *assemble(char *code);
 
