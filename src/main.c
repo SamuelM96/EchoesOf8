@@ -2,6 +2,8 @@
 #include "common.h"
 #include "disassembler.h"
 
+#include "../lib/stb_ds.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,7 +77,19 @@ int main(int argc, char *argv[]) {
 			print_usage();
 			return EXIT_FAILURE;
 		}
-		assemble(NULL);
+
+		Chip8Instruction *instructions = assemble(argv[2]);
+		FILE *output = fopen(argv[3], "w");
+		for (int i = 0; i < arrlen(instructions); ++i) {
+			Chip8Instruction instruction = instructions[i];
+			uint8_t nibbles[2];
+			nibbles[0] = (instruction.raw & 0xff00) >> 8;
+			nibbles[1] = instruction.raw & 0xff;
+			fwrite((void *)nibbles, sizeof(nibbles[0]), sizeof(nibbles), output);
+		}
+
+		fclose(output);
+		arrfree(instructions);
 	} else if (strcmp(argv[1], "compile") == 0) {
 		if (argc != 4) {
 			print_usage();
