@@ -1,3 +1,5 @@
+#include "disassembler.h"
+
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -29,10 +31,33 @@ void hexdump(void *buffer, size_t length, size_t base) {
 	printf("\n");
 }
 
-void print_instruction(uint16_t instruction) {
-	switch (instruction >> 12) {
+void print_instruction(Chip8Instruction instruction, Chip8InstructionFormat format) {
+	switch (format) {
+	case R_FORMAT:
+		printf("Opcode: %01hx\n", instruction.rformat.opcode);
+		printf("Rx: %01hx\n", instruction.rformat.rx);
+		printf("Ry: %01hx\n", instruction.rformat.ry);
+		printf("Imm: %01hx\n", instruction.rformat.imm);
+		break;
+	case I_FORMAT:
+		printf("Opcode: %01hx\n", instruction.iformat.opcode);
+		printf("Reg: %01hx\n", instruction.iformat.reg);
+		printf("Imm: %02hx\n", instruction.iformat.imm);
+		break;
+	case A_FORMAT:
+		printf("Opcode: %01hx\n", instruction.aformat.opcode);
+		printf("Addr: %03hx\n", instruction.aformat.addr);
+		break;
+	default:
+		printf("Unknown instruction format: %d\n", format);
+		break;
+	}
+}
+
+void print_asm(Chip8Instruction instruction) {
+	switch (instruction.aformat.opcode) {
 	case 0:
-		switch (0xfff & instruction) {
+		switch (instruction.aformat.addr) {
 		case 0x0E0:
 			printf("CLS");
 			break;
@@ -40,94 +65,85 @@ void print_instruction(uint16_t instruction) {
 			printf("RET");
 			break;
 		default:
-			printf("SYS %#03x", 0xfff & instruction);
+			printf("SYS %#03x", instruction.aformat.addr);
 			break;
 		}
 		break;
 	case 1:
-		printf("JMP %#03x", 0xfff & instruction);
+		printf("JMP %#03x", instruction.aformat.addr);
 		break;
 	case 2:
-		printf("CALL %#03x", 0xfff & instruction);
+		printf("CALL %#03x", instruction.aformat.addr);
 		break;
 	case 3:
-		printf("SE V%d, %#02x", (0xf00 & instruction) >> 8, 0xff & instruction);
+		printf("SE V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
 	case 4:
-		printf("SNE V%d, %#02x", (0xf00 & instruction) >> 8, 0xff & instruction);
+		printf("SNE V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
 	case 5:
-		printf("SE V%d, V%d", (0xf00 & instruction) >> 8, (0xf0 & instruction) >> 4);
+		printf("SE V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case 6:
-		printf("LD V%d, %#02x", (0xf00 & instruction) >> 8, 0xff & instruction);
+		printf("LD V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
 	case 7:
-		printf("ADD V%d, %#02x", (0xf00 & instruction) >> 8, 0xff & instruction);
+		printf("ADD V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
 	case 8:
-		switch (0xf & instruction) {
+		switch (instruction.rformat.imm) {
 		case 0:
-			printf("LD V%d, V%d", (0xf00 & instruction) >> 8,
-			       (0xf0 & instruction) >> 4);
+			printf("LD V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 			break;
 		case 1:
-			printf("OR V%d, V%d", (0xf00 & instruction) >> 8,
-			       (0xf0 & instruction) >> 4);
+			printf("OR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 			break;
 		case 2:
-			printf("AND V%d, V%d", (0xf00 & instruction) >> 8,
-			       (0xf0 & instruction) >> 4);
+			printf("AND V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 			break;
 		case 3:
-			printf("XOR V%d, V%d", (0xf00 & instruction) >> 8,
-			       (0xf0 & instruction) >> 4);
+			printf("XOR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 			break;
 		case 4:
-			printf("ADD V%d, V%d", (0xf00 & instruction) >> 8,
-			       (0xf0 & instruction) >> 4);
+			printf("ADD V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 			break;
 		case 5:
-			printf("SUB V%d, V%d", (0xf00 & instruction) >> 8,
-			       (0xf0 & instruction) >> 4);
+			printf("SUB V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 			break;
 		case 6:
-			printf("SHR V%d, V%d", (0xf00 & instruction) >> 8,
-			       (0xf0 & instruction) >> 4);
+			printf("SHR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 			break;
 		case 7:
-			printf("SUBN V%d, V%d", (0xf00 & instruction) >> 8,
-			       (0xf0 & instruction) >> 4);
+			printf("SUBN V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 			break;
 		case 0xE:
-			printf("SHL V%d, V%d", (0xf00 & instruction) >> 8,
-			       (0xf0 & instruction) >> 4);
+			printf("SHL V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 			break;
 		}
 		break;
 	case 9:
-		printf("SNE V%d, V%d", (0xf00 & instruction) >> 8, (0xf0 & instruction) >> 4);
+		printf("SNE V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case 0xA:
-		printf("LD I, %#03x", 0xfff & instruction);
+		printf("LD I, %#03x", instruction.aformat.addr);
 		break;
 	case 0xB:
-		printf("JMP V0, %#03x", 0xfff & instruction);
+		printf("JMP V0, %#03x", instruction.aformat.addr);
 		break;
 	case 0xC:
-		printf("RND V%d, %#02x", (0xf00 & instruction) >> 8, 0xff & instruction);
+		printf("RND V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
 	case 0xD:
-		printf("DRW V%d, V%d, %d", (0xf00 & instruction) >> 8, (0xf0 & instruction) >> 4,
-		       0xf & instruction);
+		printf("DRW V%d, V%d, %d", instruction.rformat.rx, instruction.rformat.ry,
+		       instruction.rformat.imm);
 		break;
 	case 0xE:
-		switch (0xff & instruction) {
+		switch (instruction.iformat.imm) {
 		case 0x9E:
-			printf("SKP V%d", (0xf00 & instruction) >> 8);
+			printf("SKP V%d", instruction.iformat.reg);
 			break;
 		case 0xA1:
-			printf("SKNP V%d", (0xf00 & instruction) >> 8);
+			printf("SKNP V%d", instruction.iformat.reg);
 			break;
 		default:
 			printf("unknown");
@@ -135,33 +151,33 @@ void print_instruction(uint16_t instruction) {
 		}
 		break;
 	case 0xF:
-		switch (0xff & instruction) {
+		switch (instruction.iformat.imm) {
 		case 0x07:
-			printf("LD V%d", (0xf00 & instruction) >> 8);
+			printf("LD V%d", instruction.iformat.reg);
 			break;
 		case 0x0A:
-			printf("LD V%d", (0xf00 & instruction) >> 8);
+			printf("LD V%d", instruction.iformat.reg);
 			break;
 		case 0x15:
-			printf("LD DT, V%d", (0xf00 & instruction) >> 8);
+			printf("LD DT, V%d", instruction.iformat.reg);
 			break;
 		case 0x18:
-			printf("LD ST, V%d", (0xf00 & instruction) >> 8);
+			printf("LD ST, V%d", instruction.iformat.reg);
 			break;
 		case 0x1E:
-			printf("ADD I, V%d", (0xf00 & instruction) >> 8);
+			printf("ADD I, V%d", instruction.iformat.reg);
 			break;
 		case 0x29:
-			printf("LD F, V%d", (0xf00 & instruction) >> 8);
+			printf("LD F, V%d", instruction.iformat.reg);
 			break;
 		case 0x33:
-			printf("LD B, V%d", (0xf00 & instruction) >> 8);
+			printf("LD B, V%d", instruction.iformat.reg);
 			break;
 		case 0x55:
-			printf("LD [I], V%d", (0xf00 & instruction) >> 8);
+			printf("LD [I], V%d", instruction.iformat.reg);
 			break;
 		case 0x65:
-			printf("LD V%d, [I]", (0xf00 & instruction) >> 8);
+			printf("LD V%d, [I]", instruction.iformat.reg);
 			break;
 		default:
 			printf("unknown");
@@ -194,28 +210,27 @@ void disassemble_rd(uint8_t *code, size_t length, size_t base) {
 
 		while (ip < length) {
 			hmputs(processed, (set_val){ ip });
-			uint16_t instruction = INST(code, ip);
-			printf("0x%08zx  %04hx    ", base + ip, instruction);
+			Chip8Instruction instruction = bytes2inst(code + ip);
+			printf("0x%08zx  %04hx    ", base + ip, instruction.raw);
 
-			print_instruction(instruction);
+			print_asm(instruction);
 
-			if (instruction == 0x00EE) {
+			if (instruction.raw == 0x00EE) {
 				break;
 			}
 
-			uint8_t inst_type = instruction >> 12;
-			if (inst_type == 1) { // JMP addr
-				uint16_t addr = instruction & 0xfff - PROG_BASE;
+			if (instruction.aformat.opcode == 1) { // JMP addr
+				uint16_t addr = instruction.aformat.addr - PROG_BASE;
 				if (!hmgets(processed, addr).key && addr != 0) {
 					arrput(queue, addr);
 				}
 				break;
-			} else if (inst_type == 0xB) { // JMP V0, addr
+			} else if (instruction.aformat.opcode == 0xB) { // JMP V0, addr
 				// Unconditional jump that requires runtime info
 				// - can't disassemble unknown address
 				break;
-			} else if (inst_type == 0x2) { // CALL addr
-				uint16_t addr = instruction & 0xfff - PROG_BASE;
+			} else if (instruction.aformat.opcode == 0x2) { // CALL addr
+				uint16_t addr = instruction.aformat.addr - PROG_BASE;
 				if (!hmgets(processed, addr).key && addr != 0) {
 					arrput(queue, addr);
 				}
@@ -237,9 +252,9 @@ void disassemble_linear(uint8_t *code, size_t length, size_t base) {
 		return;
 	}
 
-	for (size_t i = 0; i < length; i += 2) {
-		uint16_t instruction = INST(code, i);
-		printf("0x%08zx  %04hx    ", base + i, instruction);
-		print_instruction(instruction);
+	for (size_t ip = 0; ip < length; ip += 2) {
+		Chip8Instruction instruction = bytes2inst(code + ip);
+		printf("0x%08zx  %04hx    ", base + ip, instruction.raw);
+		print_asm(instruction);
 	}
 }
