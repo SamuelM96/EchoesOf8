@@ -1,3 +1,4 @@
+#include "assembler.h"
 #include "common.h"
 #include "disassembler.h"
 
@@ -74,8 +75,7 @@ int main(int argc, char *argv[]) {
 			print_usage();
 			return EXIT_FAILURE;
 		}
-		printf("!!! NOT IMPLEMENTED !!!\n");
-		return EXIT_FAILURE;
+		assemble(NULL);
 	} else if (strcmp(argv[1], "compile") == 0) {
 		if (argc != 4) {
 			print_usage();
