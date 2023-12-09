@@ -1,5 +1,6 @@
 #include "assembler.h"
 #include "disassembler.h"
+#include "common.h"
 
 #include "../lib/stb_ds.h"
 
@@ -7,8 +8,10 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 
 #define MAX_LINE_LENGTH 1024
+#define MAX_LABEL_LENGTH 256
 
 static inline char *trim(char *str) {
 	while (isspace((unsigned char)*str))
@@ -33,8 +36,8 @@ static inline char *next_arg(char *args) {
 	return trim(args);
 }
 
-Chip8Instruction parse_line(char *line) {
-	// TODO: Handle labels
+Chip8Instruction parse_line(char *line, char **out_label) {
+	*out_label = NULL;
 	char *opcode = line;
 	while (!isspace((unsigned char)*opcode)) {
 		++opcode;
@@ -51,7 +54,11 @@ Chip8Instruction parse_line(char *line) {
 		instruction.raw = 0x00EE;
 	} else if (strncmp("SYS", opcode, opcode_len) == 0) {
 		instruction.aformat.opcode = 0x0;
-		instruction.aformat.addr = strtol(args, NULL, 0);
+		if (*args < '0' || *args > '9') {
+			*out_label = args;
+		} else {
+			instruction.aformat.addr = strtol(args, NULL, 0);
+		}
 	} else if (strncmp("JMP", opcode, opcode_len) == 0) {
 		if (*args == 'V') {
 			// Bnnn - JMP V0, addr
@@ -61,10 +68,18 @@ Chip8Instruction parse_line(char *line) {
 			// 1nnn - JMP addr
 			instruction.aformat.opcode = 0x1;
 		}
-		instruction.aformat.addr = strtol(args, NULL, 0);
+		if (*args < '0' || *args > '9') {
+			*out_label = args;
+		} else {
+			instruction.aformat.addr = strtol(args, NULL, 0);
+		}
 	} else if (strncmp("CALL", opcode, opcode_len) == 0) {
 		instruction.aformat.opcode = 0x2;
-		instruction.aformat.addr = strtol(args, NULL, 0);
+		if (*args < '0' || *args > '9') {
+			*out_label = args;
+		} else {
+			instruction.aformat.addr = strtol(args, NULL, 0);
+		}
 	} else if (strncmp("SE", opcode, opcode_len) == 0) {
 		uint8_t xreg = parse_num(args + 1);
 		char *arg2 = next_arg(args);
@@ -99,7 +114,12 @@ Chip8Instruction parse_line(char *line) {
 		if (*args == 'I') {
 			// Annn - LD I, addr
 			instruction.aformat.opcode = 0xA;
-			instruction.aformat.addr = strtol(next_arg(args), NULL, 0);
+			args = next_arg(args);
+			if (*args < '0' || *args > '9') {
+				*out_label = args;
+			} else {
+				instruction.aformat.addr = strtol(args, NULL, 0);
+			}
 		} else if (*args == 'D') {
 			// Fx15 - LD DT, Vx
 			instruction.iformat.opcode = 0xF;
@@ -246,22 +266,93 @@ Chip8Instruction parse_line(char *line) {
 }
 
 Chip8Instruction *assemble(char *source_filename) {
+	bool valid = true;
 	Chip8Instruction *instructions = NULL;
+	struct {
+		char *key;
+		uint16_t value;
+	} *labels = NULL;
+	sh_new_arena(labels);
+	struct {
+		size_t key;
+		char *value;
+	} *to_patch = NULL;
+
 	FILE *source = fopen(source_filename, "r");
 	char line[MAX_LINE_LENGTH];
-
+	size_t line_num = 0;
 	while (fgets(line, sizeof(line), source)) {
+		line_num++;
 		char *trimmed_line = trim(line);
 
-		if (!*trimmed_line || *trimmed_line == '#') {
+		// TODO: Handle raw hex data
+		if (!*trimmed_line || *trimmed_line == '#' || *trimmed_line == '0') {
 			continue;
 		}
 
-		Chip8Instruction instruction = parse_line(trimmed_line);
-		arrput(instructions, instruction); // Entry point
+		char *label = NULL;
+		Chip8Instruction instruction = parse_line(trimmed_line, &label);
+		if (!instruction.raw) {
+			char *last_char = trimmed_line;
+			while (!isspace((unsigned char)*last_char)) {
+				++last_char;
+			}
+			if (*(last_char - 1) == ':') {
+				// Label handling
+				size_t label_len = last_char - trimmed_line - 1;
+				if (label_len < MAX_LABEL_LENGTH) {
+					char *new_label = malloc(label_len + 1);
+					memcpy(new_label, trimmed_line, label_len);
+					shput(labels, new_label,
+					      arrlen(instructions) * 2 + PROG_BASE);
+				} else {
+					fprintf(stderr,
+						"[!] Label on line %zu is too long! Max %d characters allowed.",
+						line_num, MAX_LABEL_LENGTH);
+					valid = false;
+				}
+			} else {
+				fprintf(stderr, "[!] Unknown instruction on line %zu: %s", line_num,
+					trimmed_line);
+				valid = false;
+			}
+		} else {
+			arrput(instructions, instruction);
+			if (label) {
+				// Track instructions with labels
+				char *temp = label;
+				while (!isspace((unsigned char)*temp)) {
+					temp++;
+				}
+
+				size_t label_len = temp - label;
+				if (label_len < MAX_LABEL_LENGTH) {
+					char *new_label = malloc(label_len + 1);
+					memcpy(new_label, label, label_len);
+					hmput(to_patch, arrlen(instructions) - 1, new_label);
+				}
+			}
+		}
+	}
+
+	for (int i = 0; i < shlen(labels); ++i) {
+		printf("%s - 0x%hx\n", labels[i].key, labels[i].value);
+	}
+
+	// Patch labels with hardcoded addresses
+	for (int i = 0; i < hmlen(to_patch); i++) {
+		Chip8Instruction *instruction = &instructions[to_patch[i].key];
+		instruction->aformat.addr = shget(labels, to_patch[i].value);
+		printf("Patching %s to be 0x%hx\n", to_patch[i].value, instruction->aformat.addr);
 	}
 
 	fclose(source);
+	shfree(labels);
+	hmfree(to_patch);
+
+	if (!valid) {
+		return NULL;
+	}
 
 	return instructions;
 }
