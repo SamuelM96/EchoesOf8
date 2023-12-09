@@ -17,6 +17,8 @@ uint8_t *read_rom(char *rom_path, size_t *out_size) {
 	size_t file_size = ftell(rom);
 	rewind(rom);
 
+	file_size += file_size % 2; // align to 2 bytes
+
 	uint8_t *buffer;
 	buffer = malloc(file_size);
 	fread(buffer, sizeof(*buffer), file_size, rom);
