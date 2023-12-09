@@ -1,6 +1,7 @@
 #ifndef DISASSEMBLER_H
 #define DISASSEMBLER_H
 
+#include <cstdint>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -76,7 +77,8 @@ typedef union {
 
 static inline Chip8Instruction bytes2inst(uint8_t *bytes) {
 	// Instruction size = 2 bytes (big endian)
-	return (Chip8Instruction)(uint16_t)((bytes[0] << 8) | bytes[1]);
+	Chip8Instruction instruction = { .raw = (uint16_t)((bytes[0] << 8) | bytes[1]) };
+	return instruction;
 }
 
 void hexdump(void *buffer, size_t length, size_t base);
