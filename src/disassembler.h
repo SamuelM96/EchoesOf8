@@ -1,7 +1,6 @@
 #ifndef DISASSEMBLER_H
 #define DISASSEMBLER_H
 
-#include <cstdint>
 #include <stdint.h>
 #include <stdlib.h>
 
