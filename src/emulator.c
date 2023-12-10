@@ -49,6 +49,11 @@ uint8_t EMULATOR_ST;
 // Display pixels
 uint32_t EMULATOR_DISPLAY[TARGET_WIDTH * TARGET_HEIGHT];
 
+// SDL state
+SDL_Window *g_window = NULL;
+SDL_Renderer *g_renderer = NULL;
+SDL_Texture *g_texture = NULL;
+
 #define draw(x, y)                                                       \
 	do {                                                             \
 		EMULATOR_DISPLAY[(y) * TARGET_WIDTH + (x)] = 0xFF97F1CD; \
@@ -67,72 +72,71 @@ void reset_state() {
 	EMULATOR_ST = 0;
 }
 
-void emulate(uint8_t *rom, size_t rom_size) {
-	printf("Emulating!\n");
-	reset_state();
-
+void init_graphics() {
 	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
 		fprintf(stderr, "[!] SDL could not initialise! SDL error: %s\n", SDL_GetError());
 	} else {
-		SDL_Window *window = SDL_CreateWindow("EchoesOf8 - CHIP-8 Emulator",
-						      SDL_WINDOWPOS_UNDEFINED,
-						      SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH,
-						      SCREEN_HEIGHT, SDL_WINDOW_SHOWN);
-		if (window == NULL) {
+		g_window = SDL_CreateWindow("EchoesOf8 - CHIP-8 Emulator", SDL_WINDOWPOS_UNDEFINED,
+					    SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT,
+					    SDL_WINDOW_SHOWN);
+		if (g_window == NULL) {
 			fprintf(stderr, "[!] Window could not be created! SDL error: %s\n",
 				SDL_GetError());
 		} else {
-			SDL_Renderer *renderer =
-				SDL_CreateRenderer(window, -1, SDL_TEXTUREACCESS_TARGET);
+			g_renderer = SDL_CreateRenderer(g_window, -1, SDL_TEXTUREACCESS_TARGET);
 
-			SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
-								 SDL_TEXTUREACCESS_TARGET,
-								 TARGET_WIDTH, TARGET_HEIGHT);
-
-			SDL_Event e;
-			bool quit = false;
-			bool left_mouse_btn_down = false;
-			while (!quit) {
-				SDL_SetRenderTarget(renderer, texture);
-				SDL_UpdateTexture(texture, NULL, EMULATOR_DISPLAY,
-						  TARGET_WIDTH * sizeof(uint32_t));
-
-				while (SDL_PollEvent(&e)) {
-					switch (e.type) {
-					case SDL_QUIT:
-						quit = true;
-						break;
-					case SDL_MOUSEBUTTONUP:
-						if (e.button.button == SDL_BUTTON_LEFT) {
-							left_mouse_btn_down = false;
-						}
-						break;
-					case SDL_MOUSEBUTTONDOWN:
-						if (e.button.button == SDL_BUTTON_LEFT) {
-							left_mouse_btn_down = true;
-							draw(e.motion.x / SCALE_X,
-							     e.motion.y / SCALE_Y);
-						}
-						break;
-					case SDL_MOUSEMOTION:
-						if (left_mouse_btn_down) {
-							draw(e.motion.x / SCALE_X,
-							     e.motion.y / SCALE_Y);
-						}
-						break;
-					}
-				}
-
-				SDL_SetRenderTarget(renderer, NULL);
-				SDL_RenderClear(renderer);
-				SDL_RenderCopy(renderer, texture, NULL, NULL);
-				SDL_RenderPresent(renderer);
-			}
-
-			SDL_DestroyTexture(texture);
-			SDL_DestroyRenderer(renderer);
-			SDL_DestroyWindow(window);
-			SDL_Quit();
+			g_texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
+						      SDL_TEXTUREACCESS_TARGET, TARGET_WIDTH,
+						      TARGET_HEIGHT);
 		}
 	}
+}
+
+bool handle_input() {
+	SDL_Event e;
+	while (SDL_PollEvent(&e)) {
+		switch (e.type) {
+		case SDL_QUIT:
+			return false;
+			break;
+		case SDL_MOUSEMOTION:
+		case SDL_MOUSEBUTTONDOWN:
+			if (e.button.button == SDL_BUTTON_LEFT) {
+				draw(e.motion.x / SCALE_X, e.motion.y / SCALE_Y);
+			}
+			break;
+		}
+	}
+
+	return true;
+}
+
+void render() {
+	SDL_SetRenderTarget(g_renderer, g_texture);
+	SDL_UpdateTexture(g_texture, NULL, EMULATOR_DISPLAY, TARGET_WIDTH * sizeof(uint32_t));
+
+	SDL_SetRenderTarget(g_renderer, NULL);
+	SDL_RenderClear(g_renderer);
+	SDL_RenderCopy(g_renderer, g_texture, NULL, NULL);
+	SDL_RenderPresent(g_renderer);
+}
+
+void cleanup() {
+	SDL_DestroyTexture(g_texture);
+	SDL_DestroyRenderer(g_renderer);
+	SDL_DestroyWindow(g_window);
+	SDL_Quit();
+}
+
+void emulate(uint8_t *rom, size_t rom_size) {
+	printf("Emulating!\n");
+	reset_state();
+	init_graphics();
+
+	while (handle_input()) {
+		// TODO: Emulator loop
+		render();
+	}
+
+	cleanup();
 }
