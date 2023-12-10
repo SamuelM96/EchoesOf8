@@ -1,11 +1,12 @@
 #include "emulator.h"
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_events.h>
-#include <SDL2/SDL_pixels.h>
-#include <SDL2/SDL_render.h>
-#include <SDL2/SDL_surface.h>
-#include <SDL2/SDL_video.h>
+#include <SDL.h>
+#include <SDL_events.h>
+#include <SDL_pixels.h>
+#include <SDL_render.h>
+#include <SDL_surface.h>
+#include <SDL_video.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>

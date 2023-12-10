@@ -9,8 +9,7 @@ sudo apt install libsdl2 libsdl2-dev
 ## Fedora
 sudo dnf install SDL2-devel
 ## macOS
-## Grab SDL2-2.24.0.dmg from here: https://github.com/libsdl-org/SDL/releases
-## Move the SDL2.framework folder to /Library/Frameworks/
+brew install SDL2
 
 # Build the project
 ./build.sh
