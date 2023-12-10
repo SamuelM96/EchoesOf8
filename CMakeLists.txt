@@ -4,7 +4,9 @@ project(eo8)
 
 set(CMAKE_CXX_STANDARD 11)
 
-find_package(SDL2 REQUIRED)
+if(APPLE)
+    set(CMAKE_BUILD_RPATH /Library/Frameworks/)
+endif()
 
 add_executable(eo8  src/main.c
                     src/assembler.c
@@ -12,7 +14,7 @@ add_executable(eo8  src/main.c
                     src/emulator.c
                     src/disassembler.c)
 
-target_include_directories(eo8 PRIVATE ${SDL2_INCLUDE_DIRS})
-target_link_libraries(eo8 ${SDL2_LIBRARIES})
+find_package(SDL2 REQUIRED COMPONENTS SDL2)
+target_link_libraries(eo8 PRIVATE SDL2::SDL2)
 
 include(GNUInstallDirs)

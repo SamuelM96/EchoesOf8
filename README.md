@@ -3,12 +3,27 @@
 ## Usage
 
 ```bash
+# Install dependencies
+## Ubuntu
+sudo apt install libsdl2 libsdl2-dev
+## Fedora
+sudo dnf install SDL2-devel
+## macOS
+## Grab SDL2-2.24.0.dmg from here: https://github.com/libsdl-org/SDL/releases
+## Move the SDL2.framework folder to /Library/Frameworks/
+
 # Build the project
 ./build.sh
 
 # Run the emulator
 ./build/eo8 <rom>
 ```
+
+> ![NOTE]
+> On macOS, you'll likely get a security error about the SDL2 framework.
+> You can accept the warning by going to `Settings > Privacy & Security`,
+> scrolling down, and clicking `Allow` for the security warning.
+> When you re-run the executable, you'll be allowed to proceed.
 
 ## Acknowledgements
 
