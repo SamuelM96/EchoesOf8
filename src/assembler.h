@@ -1,7 +1,8 @@
 #ifndef ASSEMBLER_H
 #define ASSEMBLER_H
 
-#include "disassembler.h"
+#include "instructions.h"
+
 #include <stdint.h>
 #include <stdio.h>
 

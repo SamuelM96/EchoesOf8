@@ -1,5 +1,4 @@
 #include "assembler.h"
-#include "disassembler.h"
 #include "common.h"
 
 #include "../lib/stb_ds.h"
