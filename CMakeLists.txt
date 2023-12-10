@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD 11)
 add_executable(eo8  src/main.c
                     src/assembler.c
                     src/instructions.c
+                    src/emulator.c
                     src/disassembler.c)
 
 include(GNUInstallDirs)

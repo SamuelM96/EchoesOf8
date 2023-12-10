@@ -3,6 +3,7 @@
 #include "disassembler.h"
 
 #include "../lib/stb_ds.h"
+#include "emulator.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -102,8 +103,8 @@ int main(int argc, char *argv[]) {
 			print_usage();
 			return EXIT_FAILURE;
 		}
-		printf("!!! NOT IMPLEMENTED !!!\n");
-		return EXIT_FAILURE;
+		buffer = read_rom(argv[2], &buffer_size);
+		emulate(buffer, buffer_size);
 	} else {
 		print_usage();
 		return EXIT_FAILURE;
