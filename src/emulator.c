@@ -48,6 +48,11 @@ uint8_t EMULATOR_ST;
 // Display pixels
 uint32_t EMULATOR_DISPLAY[TARGET_WIDTH * TARGET_HEIGHT];
 
+#define draw(x, y)                                                       \
+	do {                                                             \
+		EMULATOR_DISPLAY[(y) * TARGET_WIDTH + (x)] = 0xFF97F1CD; \
+	} while (false)
+
 void reset_state() {
 	memset(EMULATOR_MEMORY, 0, sizeof(EMULATOR_MEMORY));
 	memset(EMULATOR_STACK, 0, sizeof(EMULATOR_STACK));
@@ -59,10 +64,6 @@ void reset_state() {
 	EMULATOR_PC = 0;
 	EMULATOR_DT = 0;
 	EMULATOR_ST = 0;
-}
-
-static inline void draw(int x, int y) {
-	EMULATOR_DISPLAY[y * TARGET_WIDTH + x] = 0xFF97F1CD;
 }
 
 void emulate(uint8_t *rom, size_t rom_size) {
