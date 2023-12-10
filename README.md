@@ -17,3 +17,4 @@
 - [Cowgod's Chip-8 Technical Reference](http://devernay.free.fr/hacks/chip8/C8TECH10.HTM)
 - [CHIP-8 test suite](https://github.com/Timendus/chip8-test-suite)
 - [Octo](https://github.com/JohnEarnest/Octo)
+- [Lazy Foo' Productions - Beginning Game Programming v2.0](https://lazyfoo.net/tutorials/SDL/)
