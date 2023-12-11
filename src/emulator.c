@@ -1,4 +1,5 @@
 #include "emulator.h"
+#include "instructions.h"
 
 #include <SDL.h>
 #include <SDL_events.h>
@@ -128,13 +129,64 @@ void cleanup() {
 	SDL_Quit();
 }
 
+void next_instruction(uint8_t *rom) {
+	Chip8Instruction instruction = bytes2inst(rom + EMULATOR_PC * 2);
+	print_asm(instruction);
+	switch (instruction_type(instruction)) {
+	case CHIP8_CLS:
+	case CHIP8_RET:
+	case CHIP8_SYS_ADDR:
+	case CHIP8_JMP_ADDR:
+	case CHIP8_CALL_ADDR:
+	case CHIP8_SE_VX_BYTE:
+	case CHIP8_SNE_VX_BYTE:
+	case CHIP8_SE_VX_VY:
+	case CHIP8_LD_VX_BYTE:
+	case CHIP8_ADD_VX_BYTE:
+	case CHIP8_LD_VX_VY:
+	case CHIP8_OR_VX_VY:
+	case CHIP8_AND_VX_VY:
+	case CHIP8_XOR_VX_VY:
+	case CHIP8_ADD_VX_VY:
+	case CHIP8_SUB_VX_VY:
+	case CHIP8_SHR_VX:
+	case CHIP8_SUBN_VX_VY:
+	case CHIP8_SHL_VX:
+	case CHIP8_SNE_VX_VY:
+	case CHIP8_LD_I_ADDR:
+	case CHIP8_JMP_V0_ADDR:
+	case CHIP8_RND_VX_BYTE:
+	case CHIP8_DRW_VX_VY_NIBBLE:
+	case CHIP8_SKP_VX:
+	case CHIP8_SKNP_VX:
+	case CHIP8_LD_VX_DT:
+	case CHIP8_LD_VX_K:
+	case CHIP8_LD_DT_VX:
+	case CHIP8_LD_ST_VX:
+	case CHIP8_ADD_I_VX:
+	case CHIP8_LD_F_VX:
+	case CHIP8_LD_B_VX:
+	case CHIP8_LD_I_VX:
+	case CHIP8_LD_VX_I:
+	case CHIP8_UNKNOWN:
+		break;
+	}
+
+	EMULATOR_PC++;
+}
+
 void emulate(uint8_t *rom, size_t rom_size) {
 	printf("Emulating!\n");
+
 	reset_state();
 	init_graphics();
 
 	while (handle_input()) {
-		// TODO: Emulator loop
+		if (EMULATOR_PC * 2 >= rom_size) {
+			printf("[!] Reached end of ROM, exiting...");
+			break;
+		}
+		next_instruction(rom);
 		render();
 	}
 
