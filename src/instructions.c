@@ -26,138 +26,292 @@ void print_instruction(Chip8Instruction instruction, Chip8InstructionFormat form
 }
 
 void print_asm(Chip8Instruction instruction) {
-	switch (instruction.aformat.opcode) {
-	case 0:
-		switch (instruction.aformat.addr) {
-		case 0x0E0:
-			printf("CLS");
-			break;
-		case 0x0EE:
-			printf("RET");
-			break;
-		default:
-			printf("SYS %#03x", instruction.aformat.addr);
-			break;
-		}
+	switch (instruction_type(instruction)) {
+	case CHIP8_CLS:
+		printf("CLS");
 		break;
-	case 1:
+	case CHIP8_RET:
+		printf("RET");
+		break;
+	case CHIP8_SYS_ADDR:
+		printf("SYS %#03x", instruction.aformat.addr);
+		break;
+	case CHIP8_JMP_ADDR:
 		printf("JMP %#03x", instruction.aformat.addr);
 		break;
-	case 2:
+	case CHIP8_CALL_ADDR:
 		printf("CALL %#03x", instruction.aformat.addr);
 		break;
-	case 3:
+	case CHIP8_SE_VX_BYTE:
 		printf("SE V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
-	case 4:
+	case CHIP8_SNE_VX_BYTE:
 		printf("SNE V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
-	case 5:
+	case CHIP8_SE_VX_VY:
 		printf("SE V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 		break;
-	case 6:
+	case CHIP8_LD_VX_BYTE:
 		printf("LD V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
-	case 7:
+	case CHIP8_ADD_VX_BYTE:
 		printf("ADD V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
-	case 8:
-		switch (instruction.rformat.imm) {
-		case 0:
-			printf("LD V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
-			break;
-		case 1:
-			printf("OR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
-			break;
-		case 2:
-			printf("AND V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
-			break;
-		case 3:
-			printf("XOR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
-			break;
-		case 4:
-			printf("ADD V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
-			break;
-		case 5:
-			printf("SUB V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
-			break;
-		case 6:
-			printf("SHR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
-			break;
-		case 7:
-			printf("SUBN V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
-			break;
-		case 0xE:
-			printf("SHL V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
-			break;
-		}
+	case CHIP8_LD_VX_VY:
+		printf("LD V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 		break;
-	case 9:
+	case CHIP8_OR_VX_VY:
+		printf("OR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		break;
+	case CHIP8_AND_VX_VY:
+		printf("AND V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		break;
+	case CHIP8_XOR_VX_VY:
+		printf("XOR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		break;
+	case CHIP8_ADD_VX_VY:
+		printf("ADD V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		break;
+	case CHIP8_SUB_VX_VY:
+		printf("SUB V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		break;
+	case CHIP8_SHR_VX:
+		printf("SHR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		break;
+	case CHIP8_SUBN_VX_VY:
+		printf("SUBN V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		break;
+	case CHIP8_SHL_VX:
+		printf("SHL V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		break;
+	case CHIP8_SNE_VX_VY:
 		printf("SNE V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
 		break;
-	case 0xA:
+	case CHIP8_LD_I_ADDR:
 		printf("LD I, %#03x", instruction.aformat.addr);
 		break;
-	case 0xB:
+	case CHIP8_JMP_V0_ADDR:
 		printf("JMP V0, %#03x", instruction.aformat.addr);
 		break;
-	case 0xC:
+	case CHIP8_RND_VX_BYTE:
 		printf("RND V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
-	case 0xD:
+	case CHIP8_DRW_VX_VY_NIBBLE:
 		printf("DRW V%d, V%d, %d", instruction.rformat.rx, instruction.rformat.ry,
 		       instruction.rformat.imm);
 		break;
-	case 0xE:
-		switch (instruction.iformat.imm) {
-		case 0x9E:
-			printf("SKP V%d", instruction.iformat.reg);
-			break;
-		case 0xA1:
-			printf("SKNP V%d", instruction.iformat.reg);
-			break;
-		default:
-			printf("unknown");
-			break;
-		}
+	case CHIP8_SKP_VX:
+		printf("SKP V%d", instruction.iformat.reg);
 		break;
-	case 0xF:
-		switch (instruction.iformat.imm) {
-		case 0x07:
-			printf("LD V%d", instruction.iformat.reg);
-			break;
-		case 0x0A:
-			printf("LD V%d", instruction.iformat.reg);
-			break;
-		case 0x15:
-			printf("LD DT, V%d", instruction.iformat.reg);
-			break;
-		case 0x18:
-			printf("LD ST, V%d", instruction.iformat.reg);
-			break;
-		case 0x1E:
-			printf("ADD I, V%d", instruction.iformat.reg);
-			break;
-		case 0x29:
-			printf("LD F, V%d", instruction.iformat.reg);
-			break;
-		case 0x33:
-			printf("LD B, V%d", instruction.iformat.reg);
-			break;
-		case 0x55:
-			printf("LD [I], V%d", instruction.iformat.reg);
-			break;
-		case 0x65:
-			printf("LD V%d, [I]", instruction.iformat.reg);
-			break;
-		default:
-			printf("unknown");
-			break;
-		}
+	case CHIP8_SKNP_VX:
+		printf("SKNP V%d", instruction.iformat.reg);
+		break;
+	case CHIP8_LD_VX_DT:
+		printf("LD V%d, DT", instruction.iformat.reg);
+		break;
+	case CHIP8_LD_VX_K:
+		printf("LD V%d, K", instruction.iformat.reg);
+		break;
+	case CHIP8_LD_DT_VX:
+		printf("LD DT, V%d", instruction.iformat.reg);
+		break;
+	case CHIP8_LD_ST_VX:
+		printf("LD ST, V%d", instruction.iformat.reg);
+		break;
+	case CHIP8_ADD_I_VX:
+		printf("ADD I, V%d", instruction.iformat.reg);
+		break;
+	case CHIP8_LD_F_VX:
+		printf("LD F, V%d", instruction.iformat.reg);
+		break;
+	case CHIP8_LD_B_VX:
+		printf("LD B, V%d", instruction.iformat.reg);
+		break;
+	case CHIP8_LD_I_VX:
+		printf("LD [I], V%d", instruction.iformat.reg);
+		break;
+	case CHIP8_LD_VX_I:
+		printf("LD V%d, [I]", instruction.iformat.reg);
 		break;
 	default:
 		printf("unknown");
 		break;
 	}
 	printf("\n");
+}
+
+Chip8InstructionType instruction_type(Chip8Instruction instruction) {
+	switch (instruction.aformat.opcode) {
+	case 0:
+		switch (instruction.aformat.addr) {
+		case 0x0E0:
+			return CHIP8_CLS;
+		case 0x0EE:
+			return CHIP8_RET;
+		default:
+			return CHIP8_SYS_ADDR;
+		}
+		break;
+	case 1:
+		return CHIP8_JMP_ADDR;
+	case 2:
+		return CHIP8_CALL_ADDR;
+	case 3:
+		return CHIP8_SE_VX_BYTE;
+	case 4:
+		return CHIP8_SNE_VX_BYTE;
+	case 5:
+		return CHIP8_SE_VX_VY;
+	case 6:
+		return CHIP8_LD_VX_BYTE;
+	case 7:
+		return CHIP8_ADD_VX_BYTE;
+	case 8:
+		switch (instruction.rformat.imm) {
+		case 0:
+			return CHIP8_LD_VX_VY;
+		case 1:
+			return CHIP8_OR_VX_VY;
+		case 2:
+			return CHIP8_AND_VX_VY;
+		case 3:
+			return CHIP8_XOR_VX_VY;
+		case 4:
+			return CHIP8_ADD_VX_VY;
+		case 5:
+			return CHIP8_SUBN_VX_VY;
+		case 6:
+			return CHIP8_SHR_VX;
+		case 7:
+			return CHIP8_SUBN_VX_VY;
+		case 0xE:
+			return CHIP8_SHL_VX;
+		default:
+			return CHIP8_UNKNOWN;
+		}
+		break;
+	case 9:
+		return CHIP8_SNE_VX_VY;
+	case 0xA:
+		return CHIP8_LD_I_ADDR;
+	case 0xB:
+		return CHIP8_JMP_V0_ADDR;
+	case 0xC:
+		return CHIP8_RND_VX_BYTE;
+	case 0xD:
+		return CHIP8_DRW_VX_VY_NIBBLE;
+	case 0xE:
+		switch (instruction.iformat.imm) {
+		case 0x9E:
+			return CHIP8_SKP_VX;
+		case 0xA1:
+			return CHIP8_SKNP_VX;
+		default:
+			return CHIP8_UNKNOWN;
+		}
+		break;
+	case 0xF:
+		switch (instruction.iformat.imm) {
+		case 0x07:
+			return CHIP8_LD_VX_DT;
+		case 0x0A:
+			return CHIP8_LD_VX_K;
+		case 0x15:
+			return CHIP8_LD_DT_VX;
+		case 0x18:
+			return CHIP8_LD_ST_VX;
+		case 0x1E:
+			return CHIP8_ADD_I_VX;
+		case 0x29:
+			return CHIP8_LD_F_VX;
+		case 0x33:
+			return CHIP8_LD_B_VX;
+		case 0x55:
+			return CHIP8_LD_I_VX;
+		case 0x65:
+			return CHIP8_LD_VX_I;
+		default:
+			return CHIP8_UNKNOWN;
+		}
+		break;
+	default:
+		return CHIP8_UNKNOWN;
+	}
+}
+
+Chip8InstructionFormat instruction_format(Chip8Instruction instruction) {
+	switch (instruction_type(instruction)) {
+	case CHIP8_CLS:
+		return A_FORMAT;
+	case CHIP8_RET:
+		return A_FORMAT;
+	case CHIP8_SYS_ADDR:
+		return A_FORMAT;
+	case CHIP8_JMP_ADDR:
+		return A_FORMAT;
+	case CHIP8_CALL_ADDR:
+		return A_FORMAT;
+	case CHIP8_SE_VX_BYTE:
+		return I_FORMAT;
+	case CHIP8_SNE_VX_BYTE:
+		return I_FORMAT;
+	case CHIP8_SE_VX_VY:
+		return R_FORMAT;
+	case CHIP8_LD_VX_BYTE:
+		return I_FORMAT;
+	case CHIP8_ADD_VX_BYTE:
+		return I_FORMAT;
+	case CHIP8_LD_VX_VY:
+		return R_FORMAT;
+	case CHIP8_OR_VX_VY:
+		return R_FORMAT;
+	case CHIP8_AND_VX_VY:
+		return R_FORMAT;
+	case CHIP8_XOR_VX_VY:
+		return R_FORMAT;
+	case CHIP8_ADD_VX_VY:
+		return R_FORMAT;
+	case CHIP8_SUB_VX_VY:
+		return R_FORMAT;
+	case CHIP8_SHR_VX:
+		return R_FORMAT;
+	case CHIP8_SUBN_VX_VY:
+		return R_FORMAT;
+	case CHIP8_SHL_VX:
+		return R_FORMAT;
+	case CHIP8_SNE_VX_VY:
+		return R_FORMAT;
+	case CHIP8_LD_I_ADDR:
+		return A_FORMAT;
+	case CHIP8_JMP_V0_ADDR:
+		return A_FORMAT;
+	case CHIP8_RND_VX_BYTE:
+		return I_FORMAT;
+	case CHIP8_DRW_VX_VY_NIBBLE:
+		return R_FORMAT;
+	case CHIP8_SKP_VX:
+		return I_FORMAT;
+	case CHIP8_SKNP_VX:
+		return I_FORMAT;
+	case CHIP8_LD_VX_DT:
+		return I_FORMAT;
+	case CHIP8_LD_VX_K:
+		return I_FORMAT;
+	case CHIP8_LD_DT_VX:
+		return I_FORMAT;
+	case CHIP8_LD_ST_VX:
+		return I_FORMAT;
+	case CHIP8_ADD_I_VX:
+		return I_FORMAT;
+	case CHIP8_LD_F_VX:
+		return I_FORMAT;
+	case CHIP8_LD_B_VX:
+		return I_FORMAT;
+	case CHIP8_LD_I_VX:
+		return I_FORMAT;
+	case CHIP8_LD_VX_I:
+		return I_FORMAT;
+	default:
+		return UNKNOWN_FORMAT;
+	}
 }
