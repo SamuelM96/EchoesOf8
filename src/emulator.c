@@ -138,9 +138,11 @@ bool next_instruction() {
 
 	Chip8Instruction instruction = bytes2inst(&EMULATOR_MEMORY[EMULATOR_PC]);
 	print_asm(instruction);
+
 	switch (instruction_type(instruction)) {
 	case CHIP8_CLS:
 		memset(EMULATOR_DISPLAY, 0, sizeof(EMULATOR_DISPLAY));
+		break;
 	case CHIP8_RET:
 	case CHIP8_SYS_ADDR:
 	case CHIP8_JMP_ADDR:
@@ -176,7 +178,8 @@ bool next_instruction() {
 	case CHIP8_LD_I_VX:
 	case CHIP8_LD_VX_I:
 	case CHIP8_UNKNOWN:
-		break;
+		fprintf(stderr, "[!] Unknown instruction received: 0x%04hx\n", instruction.raw);
+		return false;
 	}
 
 	EMULATOR_PC += 2;
