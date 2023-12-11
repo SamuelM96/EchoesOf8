@@ -1,5 +1,6 @@
 #include "emulator.h"
 #include "common.h"
+#include "disassembler.h"
 #include "instructions.h"
 
 #include <SDL.h>
@@ -130,6 +131,29 @@ void cleanup() {
 	SDL_Quit();
 }
 
+void dump_state() {
+	fprintf(stderr, "===== REGISTERS DUMP ====\n");
+	for (int i = 0; i < sizeof(EMULATOR_REGISTERS); ++i) {
+		fprintf(stderr, "V%02d = 0x%02hx  ", i, EMULATOR_REGISTERS[i]);
+		if ((i + 1) % 4 == 0) {
+			fprintf(stderr, "\n");
+		}
+	}
+	fprintf(stderr, "SP  = 0x%02hx  ", EMULATOR_SP);
+	fprintf(stderr, "DT  = 0x%02hx  ", EMULATOR_DT);
+	fprintf(stderr, "ST  = 0x%02hx\n", EMULATOR_ST);
+	fprintf(stderr, "VI = 0x%04hx\n", EMULATOR_VI);
+	fprintf(stderr, "PC = 0x%04hx\n", EMULATOR_PC);
+
+	fprintf(stderr, "\n===== STACK DUMP ====\n");
+	for (int i = 0; i < ARRAY_SIZE(EMULATOR_STACK); ++i) {
+		fprintf(stderr, "[%02hhd] = 0x%02hx\n", i, EMULATOR_STACK[i]);
+	}
+
+	fprintf(stderr, "\n===== MEMORY DUMP ====\n");
+	hexdump(EMULATOR_MEMORY, sizeof(EMULATOR_MEMORY), 0);
+}
+
 bool next_instruction() {
 	if (EMULATOR_PC < 0 || EMULATOR_PC > sizeof(EMULATOR_MEMORY)) {
 		fprintf(stderr, "[!] PC exceeds memory limit");
@@ -145,6 +169,9 @@ bool next_instruction() {
 		break;
 	case CHIP8_RET:
 	case CHIP8_SYS_ADDR:
+		fprintf(stderr, "[!] SYS instructions not supported: 0x%04hx @ 0x%03hx\n",
+			instruction.raw, EMULATOR_PC);
+		return false;
 	case CHIP8_JMP_ADDR:
 	case CHIP8_CALL_ADDR:
 	case CHIP8_SE_VX_BYTE:
@@ -178,7 +205,8 @@ bool next_instruction() {
 	case CHIP8_LD_I_VX:
 	case CHIP8_LD_VX_I:
 	case CHIP8_UNKNOWN:
-		fprintf(stderr, "[!] Unknown instruction received: 0x%04hx\n", instruction.raw);
+		fprintf(stderr, "[!] Unknown instruction received: 0x%04hx @ 0x%03hx\n",
+			instruction.raw, EMULATOR_PC);
 		return false;
 	}
 
@@ -197,8 +225,10 @@ void emulate(uint8_t *rom, size_t rom_size) {
 	while (handle_input()) {
 		if (EMULATOR_PC >= rom_size + PROG_BASE) {
 			fprintf(stderr, "[!] PC exceeded ROM boundary\n");
+			dump_state();
 			break;
 		} else if (!next_instruction()) {
+			dump_state();
 			break;
 		}
 		render();
