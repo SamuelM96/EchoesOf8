@@ -5,7 +5,7 @@
 ```bash
 # Install dependencies
 ## Ubuntu
-sudo apt install libsdl2 libsdl2-dev
+sudo apt install libsdl2-dev
 ## Fedora
 sudo dnf install SDL2-devel
 ## macOS
