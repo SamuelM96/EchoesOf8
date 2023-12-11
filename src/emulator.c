@@ -1,4 +1,5 @@
 #include "emulator.h"
+#include "common.h"
 #include "instructions.h"
 
 #include <SDL.h>
@@ -39,7 +40,7 @@ uint8_t EMULATOR_REGISTERS[16];
 uint16_t EMULATOR_VI;
 
 // Program counter
-uint16_t EMULATOR_PC;
+uint16_t EMULATOR_PC = PROG_BASE;
 
 // Delay timer
 uint8_t EMULATOR_DT;
@@ -68,7 +69,7 @@ void reset_state() {
 
 	EMULATOR_SP = 0;
 	EMULATOR_VI = 0;
-	EMULATOR_PC = 0;
+	EMULATOR_PC = PROG_BASE;
 	EMULATOR_DT = 0;
 	EMULATOR_ST = 0;
 }
@@ -129,11 +130,17 @@ void cleanup() {
 	SDL_Quit();
 }
 
-void next_instruction(uint8_t *rom) {
-	Chip8Instruction instruction = bytes2inst(rom + EMULATOR_PC * 2);
+bool next_instruction() {
+	if (EMULATOR_PC < 0 || EMULATOR_PC > sizeof(EMULATOR_MEMORY)) {
+		fprintf(stderr, "[!] PC exceeds memory limit");
+		return false;
+	}
+
+	Chip8Instruction instruction = bytes2inst(&EMULATOR_MEMORY[EMULATOR_PC]);
 	print_asm(instruction);
 	switch (instruction_type(instruction)) {
 	case CHIP8_CLS:
+		memset(EMULATOR_DISPLAY, 0, sizeof(EMULATOR_DISPLAY));
 	case CHIP8_RET:
 	case CHIP8_SYS_ADDR:
 	case CHIP8_JMP_ADDR:
@@ -172,7 +179,8 @@ void next_instruction(uint8_t *rom) {
 		break;
 	}
 
-	EMULATOR_PC++;
+	EMULATOR_PC += 2;
+	return true;
 }
 
 void emulate(uint8_t *rom, size_t rom_size) {
@@ -181,12 +189,15 @@ void emulate(uint8_t *rom, size_t rom_size) {
 	reset_state();
 	init_graphics();
 
+	memcpy(EMULATOR_MEMORY + PROG_BASE, rom, rom_size);
+
 	while (handle_input()) {
-		if (EMULATOR_PC * 2 >= rom_size) {
-			printf("[!] Reached end of ROM, exiting...");
+		if (EMULATOR_PC >= rom_size + PROG_BASE) {
+			fprintf(stderr, "[!] PC exceeded ROM boundary\n");
+			break;
+		} else if (!next_instruction()) {
 			break;
 		}
-		next_instruction(rom);
 		render();
 	}
 
