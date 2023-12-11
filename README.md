@@ -18,7 +18,7 @@ brew install SDL2
 ./build/eo8 <rom>
 ```
 
-> ![NOTE]
+> [!NOTE]
 > On macOS, you'll likely get a security error about the SDL2 framework.
 > You can accept the warning by going to `Settings > Privacy & Security`,
 > scrolling down, and clicking `Allow` for the security warning.
