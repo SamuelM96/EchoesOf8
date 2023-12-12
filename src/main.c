@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
 			return EXIT_FAILURE;
 		}
 		buffer = read_rom(argv[2], &buffer_size);
-		emulate(buffer, buffer_size);
+		emulate(buffer, buffer_size, true);
 	} else {
 		print_usage();
 		return EXIT_FAILURE;

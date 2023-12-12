@@ -1,10 +1,10 @@
 #ifndef EMULATOR_H
 #define EMULATOR_H
 
-#include "instructions.h"
-
+#include <stdbool.h>
 #include <stdlib.h>
+#include <stdint.h>
 
-void emulate(uint8_t *rom, size_t rom_size);
+void emulate(uint8_t *rom, size_t rom_size, bool debug);
 
 #endif // !EMULATOR_H

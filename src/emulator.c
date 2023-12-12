@@ -375,7 +375,7 @@ bool next_instruction() {
 	return true;
 }
 
-void emulate(uint8_t *rom, size_t rom_size) {
+void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	printf("Emulating!\n");
 
 	reset_state();
@@ -383,7 +383,10 @@ void emulate(uint8_t *rom, size_t rom_size) {
 
 	memcpy(g_emulator.memory + PROG_BASE, rom, rom_size);
 
-	g_debug = true;
+	if (debug) {
+		g_debug = true;
+		printf("Debugging enabled!\n");
+	}
 	while (handle_input()) {
 		if (!g_debug) {
 			if (!next_instruction()) {
