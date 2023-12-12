@@ -5,8 +5,10 @@
 
 #include <SDL.h>
 #include <SDL_events.h>
+#include <SDL_keyboard.h>
 #include <SDL_pixels.h>
 #include <SDL_render.h>
+#include <SDL_scancode.h>
 #include <SDL_surface.h>
 #include <SDL_video.h>
 
@@ -55,6 +57,7 @@ typedef struct EMULATOR_STATE {
 } EMULATOR_STATE;
 
 EMULATOR_STATE g_emulator;
+bool g_debug = false;
 
 // SDL state
 SDL_Window *g_window = NULL;
@@ -67,6 +70,41 @@ SDL_Texture *g_texture = NULL;
 		pixel((x), (y)) ^= state ? 0xFF97F1CD : 0; \
 	} while (false)
 
+bool next_instruction();
+
+void dump_registers() {
+	fprintf(stderr, "===== REGISTERS DUMP ====\n");
+	for (int i = 0; i < sizeof(g_emulator.registers); ++i) {
+		fprintf(stderr, "V%X = 0x%02hx  ", i, g_emulator.registers[i]);
+		if ((i + 1) % 4 == 0) {
+			fprintf(stderr, "\n");
+		}
+	}
+	fprintf(stderr, "SP = 0x%02hx  ", g_emulator.sp);
+	fprintf(stderr, "DT = 0x%02hx  ", g_emulator.dt);
+	fprintf(stderr, "ST = 0x%02hx\n", g_emulator.st);
+	fprintf(stderr, "VI = 0x%04hx\n", g_emulator.vi);
+	fprintf(stderr, "PC = 0x%04hx\n", g_emulator.pc);
+}
+
+void dump_stack() {
+	fprintf(stderr, "\n===== STACK DUMP ====\n");
+	for (int i = 0; i < ARRAY_SIZE(g_emulator.stack); ++i) {
+		fprintf(stderr, "[%02hhd] = 0x%02hx\n", i, g_emulator.stack[i]);
+	}
+}
+
+static inline void dump_memory() {
+	fprintf(stderr, "\n===== MEMORY DUMP ====\n");
+	hexdump(g_emulator.memory, sizeof(g_emulator.memory), 0);
+}
+
+void dump_state() {
+	dump_registers();
+	dump_stack();
+	dump_memory();
+}
+
 void reset_state() {
 	memset(g_emulator.memory, 0, sizeof(g_emulator.memory));
 	memset(g_emulator.stack, 0, sizeof(g_emulator.stack));
@@ -78,6 +116,8 @@ void reset_state() {
 	g_emulator.pc = PROG_BASE;
 	g_emulator.dt = 0;
 	g_emulator.st = 0;
+
+	g_debug = false;
 }
 
 void init_graphics() {
@@ -105,15 +145,30 @@ bool handle_input() {
 	while (SDL_PollEvent(&e)) {
 		switch (e.type) {
 		case SDL_QUIT:
+			printf("Quitting...\n");
 			return false;
-			break;
-		case SDL_MOUSEMOTION:
-		case SDL_MOUSEBUTTONDOWN:
-			if (e.button.button == SDL_BUTTON_LEFT) {
-				draw(e.motion.x / SCALE_X, e.motion.y / SCALE_Y, true);
+		case SDL_KEYDOWN: {
+			switch (e.key.keysym.scancode) {
+			case SDL_SCANCODE_Q:
+				printf("Quitting...\n");
+				return false;
+			case SDL_SCANCODE_SPACE:
+				g_debug = !g_debug;
+				printf("%s emulator\n", g_debug ? "Paused" : "Unpaused");
+				break;
+			case SDL_SCANCODE_N:
+				if (g_debug) {
+					next_instruction();
+					dump_registers();
+					printf("\n");
+				}
+				break;
+			default:
+				break;
 			}
-			break;
 		}
+		}
+		break;
 	}
 
 	return true;
@@ -136,33 +191,10 @@ void cleanup() {
 	SDL_Quit();
 }
 
-void dump_state() {
-	fprintf(stderr, "===== REGISTERS DUMP ====\n");
-	for (int i = 0; i < sizeof(g_emulator.registers); ++i) {
-		fprintf(stderr, "V%X = 0x%02hx  ", i, g_emulator.registers[i]);
-		if ((i + 1) % 4 == 0) {
-			fprintf(stderr, "\n");
-		}
-	}
-	fprintf(stderr, "SP = 0x%02hx  ", g_emulator.sp);
-	fprintf(stderr, "DT = 0x%02hx  ", g_emulator.dt);
-	fprintf(stderr, "ST = 0x%02hx\n", g_emulator.st);
-	fprintf(stderr, "VI = 0x%04hx\n", g_emulator.vi);
-	fprintf(stderr, "PC = 0x%04hx\n", g_emulator.pc);
-
-	fprintf(stderr, "\n===== STACK DUMP ====\n");
-	for (int i = 0; i < ARRAY_SIZE(g_emulator.stack); ++i) {
-		fprintf(stderr, "[%02hhd] = 0x%02hx\n", i, g_emulator.stack[i]);
-	}
-
-	fprintf(stderr, "\n===== MEMORY DUMP ====\n");
-	// hexdump(g_emulator.memory, sizeof(g_emulator.memory), 0);
-}
-
 bool next_instruction() {
 	static uint16_t previous;
 	if (g_emulator.pc < 0 || g_emulator.pc > sizeof(g_emulator.memory)) {
-		fprintf(stderr, "[!] PC exceeds memory limit");
+		fprintf(stderr, "[!] PC exceeds memory boundaries\n");
 		return false;
 	}
 
@@ -351,12 +383,12 @@ void emulate(uint8_t *rom, size_t rom_size) {
 
 	memcpy(g_emulator.memory + PROG_BASE, rom, rom_size);
 
-	bool pause = false;
+	g_debug = true;
 	while (handle_input()) {
-		if (!pause) {
+		if (!g_debug) {
 			if (!next_instruction()) {
 				dump_state();
-				pause = true;
+				g_debug = true;
 			}
 		}
 		render();
