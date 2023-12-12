@@ -162,6 +162,7 @@ bool next_instruction() {
 
 	Chip8Instruction instruction = bytes2inst(&EMULATOR_MEMORY[EMULATOR_PC]);
 	print_asm(instruction);
+	EMULATOR_PC += 2;
 
 	switch (instruction_type(instruction)) {
 	case CHIP8_CLS:
@@ -210,7 +211,6 @@ bool next_instruction() {
 		return false;
 	}
 
-	EMULATOR_PC += 2;
 	return true;
 }
 
@@ -222,14 +222,13 @@ void emulate(uint8_t *rom, size_t rom_size) {
 
 	memcpy(EMULATOR_MEMORY + PROG_BASE, rom, rom_size);
 
+	bool pause = false;
 	while (handle_input()) {
-		if (EMULATOR_PC >= rom_size + PROG_BASE) {
-			fprintf(stderr, "[!] PC exceeded ROM boundary\n");
-			dump_state();
-			break;
-		} else if (!next_instruction()) {
-			dump_state();
-			break;
+		if (!pause) {
+			if (!next_instruction()) {
+				dump_state();
+				pause = true;
+			}
 		}
 		render();
 	}

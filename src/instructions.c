@@ -144,6 +144,8 @@ Chip8InstructionType instruction_type(Chip8Instruction instruction) {
 	switch (instruction.aformat.opcode) {
 	case 0:
 		switch (instruction.aformat.addr) {
+		case 0x000:
+			return CHIP8_UNKNOWN;
 		case 0x0E0:
 			return CHIP8_CLS;
 		case 0x0EE:
