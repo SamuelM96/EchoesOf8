@@ -196,6 +196,23 @@ void cleanup() {
 	SDL_Quit();
 }
 
+void print_instruction_state(Chip8Instruction instruction) {
+	switch (instruction_format(instruction_type(instruction))) {
+	case R_FORMAT:
+		printf("# V%hX = %02hhx, V%hX = %02hhx", instruction.rformat.rx,
+		       g_emulator.registers[instruction.rformat.rx], instruction.rformat.ry,
+		       g_emulator.registers[instruction.rformat.ry]);
+		break;
+	case I_FORMAT:
+		printf("# V%hX = %02hhx", instruction.iformat.reg,
+		       g_emulator.registers[instruction.iformat.reg]);
+		break;
+	case A_FORMAT:
+	case UNKNOWN_FORMAT:
+		break;
+	}
+}
+
 bool next_instruction() {
 	static uint16_t previous;
 	if (g_emulator.pc < 0 || g_emulator.pc > sizeof(g_emulator.memory)) {
@@ -206,6 +223,9 @@ bool next_instruction() {
 	Chip8Instruction instruction = bytes2inst(&g_emulator.memory[g_emulator.pc]);
 	if (g_emulator.pc != previous) {
 		print_asm(instruction);
+		printf("\t");
+		print_instruction_state(instruction);
+		printf("\n");
 	}
 	previous = g_emulator.pc;
 	g_emulator.pc += 2;

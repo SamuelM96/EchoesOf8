@@ -137,7 +137,6 @@ void print_asm(Chip8Instruction instruction) {
 		printf("unknown");
 		break;
 	}
-	printf("\n");
 }
 
 Chip8InstructionType instruction_type(Chip8Instruction instruction) {
