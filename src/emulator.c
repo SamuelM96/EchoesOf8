@@ -134,14 +134,14 @@ void cleanup() {
 void dump_state() {
 	fprintf(stderr, "===== REGISTERS DUMP ====\n");
 	for (int i = 0; i < sizeof(EMULATOR_REGISTERS); ++i) {
-		fprintf(stderr, "V%02d = 0x%02hx  ", i, EMULATOR_REGISTERS[i]);
+		fprintf(stderr, "V%X = 0x%02hx  ", i, EMULATOR_REGISTERS[i]);
 		if ((i + 1) % 4 == 0) {
 			fprintf(stderr, "\n");
 		}
 	}
-	fprintf(stderr, "SP  = 0x%02hx  ", EMULATOR_SP);
-	fprintf(stderr, "DT  = 0x%02hx  ", EMULATOR_DT);
-	fprintf(stderr, "ST  = 0x%02hx\n", EMULATOR_ST);
+	fprintf(stderr, "SP = 0x%02hx  ", EMULATOR_SP);
+	fprintf(stderr, "DT = 0x%02hx  ", EMULATOR_DT);
+	fprintf(stderr, "ST = 0x%02hx\n", EMULATOR_ST);
 	fprintf(stderr, "VI = 0x%04hx\n", EMULATOR_VI);
 	fprintf(stderr, "PC = 0x%04hx\n", EMULATOR_PC);
 
