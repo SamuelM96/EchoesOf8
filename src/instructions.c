@@ -241,8 +241,8 @@ Chip8InstructionType instruction_type(Chip8Instruction instruction) {
 	}
 }
 
-Chip8InstructionFormat instruction_format(Chip8Instruction instruction) {
-	switch (instruction_type(instruction)) {
+Chip8InstructionFormat instruction_format(Chip8InstructionType type) {
+	switch (type) {
 	case CHIP8_CLS:
 		return A_FORMAT;
 	case CHIP8_RET:

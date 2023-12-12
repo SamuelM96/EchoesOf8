@@ -84,6 +84,6 @@ static inline Chip8Instruction bytes2inst(uint8_t *bytes) {
 void print_asm(Chip8Instruction instruction);
 void print_instruction(Chip8Instruction instruction, Chip8InstructionFormat format);
 Chip8InstructionType instruction_type(Chip8Instruction instruction);
-Chip8InstructionFormat instruction_format(Chip8Instruction instruction);
+Chip8InstructionFormat instruction_format(Chip8InstructionType type);
 
 #endif // !INSTRUCTIONS_H
