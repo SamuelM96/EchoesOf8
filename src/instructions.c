@@ -181,7 +181,7 @@ Chip8InstructionType instruction_type(Chip8Instruction instruction) {
 		case 4:
 			return CHIP8_ADD_VX_VY;
 		case 5:
-			return CHIP8_SUBN_VX_VY;
+			return CHIP8_SUB_VX_VY;
 		case 6:
 			return CHIP8_SHR_VX;
 		case 7:
