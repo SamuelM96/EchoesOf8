@@ -170,6 +170,8 @@ bool next_instruction() {
 		memset(EMULATOR_DISPLAY, 0, sizeof(EMULATOR_DISPLAY));
 		break;
 	case CHIP8_RET:
+		EMULATOR_PC = EMULATOR_STACK[--EMULATOR_SP];
+		break;
 	case CHIP8_SYS_ADDR:
 		fprintf(stderr, "[!] SYS instructions not supported: 0x%04hx @ 0x%03hx\n",
 			instruction.raw, EMULATOR_PC);
@@ -178,13 +180,25 @@ bool next_instruction() {
 		EMULATOR_PC = instruction.aformat.addr;
 		break;
 	case CHIP8_CALL_ADDR:
-		return false;
+		EMULATOR_STACK[EMULATOR_SP++] = EMULATOR_PC;
+		EMULATOR_PC = instruction.aformat.addr;
+		break;
 	case CHIP8_SE_VX_BYTE:
-		return false;
+		if (EMULATOR_REGISTERS[instruction.iformat.reg] == instruction.iformat.imm) {
+			EMULATOR_PC += 2;
+		}
+		break;
 	case CHIP8_SNE_VX_BYTE:
-		return false;
+		if (EMULATOR_REGISTERS[instruction.iformat.reg] != instruction.iformat.imm) {
+			EMULATOR_PC += 2;
+		}
+		break;
 	case CHIP8_SE_VX_VY:
-		return false;
+		if (EMULATOR_REGISTERS[instruction.rformat.rx] ==
+		    EMULATOR_REGISTERS[instruction.rformat.ry]) {
+			EMULATOR_PC += 2;
+		}
+		break;
 	case CHIP8_LD_VX_BYTE:
 		EMULATOR_REGISTERS[instruction.iformat.reg] = instruction.iformat.imm;
 		break;
@@ -196,23 +210,51 @@ bool next_instruction() {
 			EMULATOR_REGISTERS[instruction.rformat.ry];
 		break;
 	case CHIP8_OR_VX_VY:
-		return false;
+		EMULATOR_REGISTERS[instruction.rformat.rx] |=
+			EMULATOR_REGISTERS[instruction.rformat.ry];
+		break;
 	case CHIP8_AND_VX_VY:
-		return false;
+		EMULATOR_REGISTERS[instruction.rformat.rx] &=
+			EMULATOR_REGISTERS[instruction.rformat.ry];
+		break;
 	case CHIP8_XOR_VX_VY:
-		return false;
-	case CHIP8_ADD_VX_VY:
-		return false;
+		EMULATOR_REGISTERS[instruction.rformat.rx] ^=
+			EMULATOR_REGISTERS[instruction.rformat.ry];
+		break;
+	case CHIP8_ADD_VX_VY: {
+		uint16_t result = EMULATOR_REGISTERS[instruction.rformat.rx] +
+				  EMULATOR_REGISTERS[instruction.rformat.ry];
+		EMULATOR_REGISTERS[0xF] = 0x100 & result;
+		EMULATOR_REGISTERS[instruction.rformat.rx] = (uint8_t)result;
+		break;
+	}
 	case CHIP8_SUB_VX_VY:
-		return false;
+		EMULATOR_REGISTERS[0xF] = EMULATOR_REGISTERS[instruction.rformat.rx] >
+					  EMULATOR_REGISTERS[instruction.rformat.ry];
+		EMULATOR_REGISTERS[instruction.rformat.rx] -=
+			EMULATOR_REGISTERS[instruction.rformat.ry];
+		break;
 	case CHIP8_SHR_VX:
-		return false;
+		EMULATOR_REGISTERS[0xF] = EMULATOR_REGISTERS[instruction.rformat.rx] & 1;
+		EMULATOR_REGISTERS[instruction.rformat.rx] >>= 1;
+		break;
 	case CHIP8_SUBN_VX_VY:
-		return false;
+		EMULATOR_REGISTERS[0xF] = EMULATOR_REGISTERS[instruction.rformat.ry] >
+					  EMULATOR_REGISTERS[instruction.rformat.rx];
+		EMULATOR_REGISTERS[instruction.rformat.rx] =
+			EMULATOR_REGISTERS[instruction.rformat.ry] -
+			EMULATOR_REGISTERS[instruction.rformat.rx];
+		break;
 	case CHIP8_SHL_VX:
-		return false;
+		EMULATOR_REGISTERS[0xF] = EMULATOR_REGISTERS[instruction.rformat.rx] & 0x80;
+		EMULATOR_REGISTERS[instruction.rformat.rx] <<= 1;
+		break;
 	case CHIP8_SNE_VX_VY:
-		return false;
+		if (EMULATOR_REGISTERS[instruction.rformat.rx] !=
+		    EMULATOR_REGISTERS[instruction.rformat.ry]) {
+			EMULATOR_PC += 2;
+		}
+		break;
 	case CHIP8_LD_I_ADDR:
 		EMULATOR_VI = instruction.aformat.addr;
 		break;
@@ -248,15 +290,29 @@ bool next_instruction() {
 	case CHIP8_LD_ST_VX:
 		return false;
 	case CHIP8_ADD_I_VX:
-		return false;
+		EMULATOR_VI += EMULATOR_REGISTERS[instruction.iformat.reg];
+		break;
 	case CHIP8_LD_F_VX:
 		return false;
-	case CHIP8_LD_B_VX:
-		return false;
+	case CHIP8_LD_B_VX: {
+		uint8_t digit = EMULATOR_REGISTERS[instruction.iformat.reg];
+		EMULATOR_MEMORY[EMULATOR_VI + 2] = digit % 10;
+		digit /= 10;
+		EMULATOR_MEMORY[EMULATOR_VI + 1] = digit % 10;
+		digit /= 10;
+		EMULATOR_MEMORY[EMULATOR_VI] = digit % 10;
+		break;
+	}
 	case CHIP8_LD_I_VX:
-		return false;
+		for (int i = 0; i <= instruction.iformat.reg; ++i) {
+			EMULATOR_MEMORY[EMULATOR_VI + i] = EMULATOR_REGISTERS[i];
+		}
+		break;
 	case CHIP8_LD_VX_I:
-		return false;
+		for (int i = 0; i <= instruction.iformat.reg; ++i) {
+			EMULATOR_REGISTERS[i] = EMULATOR_MEMORY[EMULATOR_VI + i];
+		}
+		break;
 	case CHIP8_UNKNOWN:
 		fprintf(stderr, "[!] Unknown instruction received: 0x%04hx @ 0x%03hx\n",
 			instruction.raw, EMULATOR_PC);
