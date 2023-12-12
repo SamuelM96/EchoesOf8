@@ -90,7 +90,11 @@ void dump_registers() {
 void dump_stack() {
 	fprintf(stderr, "\n===== STACK DUMP ====\n");
 	for (int i = 0; i < ARRAY_SIZE(g_emulator.stack); ++i) {
-		fprintf(stderr, "[%02hhd] = 0x%02hx\n", i, g_emulator.stack[i]);
+		fprintf(stderr, "[%02hhd] = 0x%02hx", i, g_emulator.stack[i]);
+		if (i == g_emulator.sp) {
+			printf("  <-- SP");
+		}
+		printf("\n");
 	}
 }
 
@@ -160,6 +164,7 @@ bool handle_input() {
 				if (g_debug) {
 					next_instruction();
 					dump_registers();
+					dump_stack();
 					printf("\n");
 				}
 				break;
