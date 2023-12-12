@@ -294,9 +294,7 @@ bool next_instruction() {
 		break;
 	}
 	case CHIP8_SUB_VX_VY: {
-		// BUG: Apparently the flag isn't being set correctly? Same with SUBN
-		// Looks fine to be, so might be somewhere else that's bugged...?
-		bool flag = g_emulator.registers[instruction.rformat.rx] >
+		bool flag = g_emulator.registers[instruction.rformat.rx] >=
 			    g_emulator.registers[instruction.rformat.ry];
 		g_emulator.registers[instruction.rformat.rx] -=
 			g_emulator.registers[instruction.rformat.ry];
@@ -310,7 +308,7 @@ bool next_instruction() {
 		break;
 	}
 	case CHIP8_SUBN_VX_VY: {
-		bool flag = g_emulator.registers[instruction.rformat.ry] >
+		bool flag = g_emulator.registers[instruction.rformat.ry] >=
 			    g_emulator.registers[instruction.rformat.rx];
 		g_emulator.registers[instruction.rformat.rx] =
 			g_emulator.registers[instruction.rformat.ry] -
