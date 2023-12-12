@@ -152,7 +152,7 @@ void dump_state() {
 	}
 
 	fprintf(stderr, "\n===== MEMORY DUMP ====\n");
-	hexdump(EMULATOR_MEMORY, sizeof(EMULATOR_MEMORY), 0);
+	// hexdump(EMULATOR_MEMORY, sizeof(EMULATOR_MEMORY), 0);
 }
 
 bool next_instruction() {
@@ -228,31 +228,41 @@ bool next_instruction() {
 	case CHIP8_ADD_VX_VY: {
 		uint16_t result = EMULATOR_REGISTERS[instruction.rformat.rx] +
 				  EMULATOR_REGISTERS[instruction.rformat.ry];
-		EMULATOR_REGISTERS[0xF] = 0x100 & result;
 		EMULATOR_REGISTERS[instruction.rformat.rx] = (uint8_t)result;
+		EMULATOR_REGISTERS[0xF] = (0x100 & result) > 0;
 		break;
 	}
-	case CHIP8_SUB_VX_VY:
-		EMULATOR_REGISTERS[0xF] = EMULATOR_REGISTERS[instruction.rformat.rx] >
-					  EMULATOR_REGISTERS[instruction.rformat.ry];
+	case CHIP8_SUB_VX_VY: {
+		// BUG: Apparently the flag isn't being set correctly? Same with SUBN
+		// Looks fine to be, so might be somewhere else that's bugged...?
+		bool flag = EMULATOR_REGISTERS[instruction.rformat.rx] >
+			    EMULATOR_REGISTERS[instruction.rformat.ry];
 		EMULATOR_REGISTERS[instruction.rformat.rx] -=
 			EMULATOR_REGISTERS[instruction.rformat.ry];
+		EMULATOR_REGISTERS[0xF] = flag;
 		break;
-	case CHIP8_SHR_VX:
-		EMULATOR_REGISTERS[0xF] = EMULATOR_REGISTERS[instruction.rformat.rx] & 1;
+	}
+	case CHIP8_SHR_VX: {
+		bool flag = EMULATOR_REGISTERS[instruction.rformat.rx] & 1;
 		EMULATOR_REGISTERS[instruction.rformat.rx] >>= 1;
+		EMULATOR_REGISTERS[0xF] = flag;
 		break;
-	case CHIP8_SUBN_VX_VY:
-		EMULATOR_REGISTERS[0xF] = EMULATOR_REGISTERS[instruction.rformat.ry] >
-					  EMULATOR_REGISTERS[instruction.rformat.rx];
+	}
+	case CHIP8_SUBN_VX_VY: {
+		bool flag = EMULATOR_REGISTERS[instruction.rformat.ry] >
+			    EMULATOR_REGISTERS[instruction.rformat.rx];
 		EMULATOR_REGISTERS[instruction.rformat.rx] =
 			EMULATOR_REGISTERS[instruction.rformat.ry] -
 			EMULATOR_REGISTERS[instruction.rformat.rx];
+		EMULATOR_REGISTERS[0xF] = flag;
 		break;
-	case CHIP8_SHL_VX:
-		EMULATOR_REGISTERS[0xF] = EMULATOR_REGISTERS[instruction.rformat.rx] & 0x80;
+	}
+	case CHIP8_SHL_VX: {
+		bool flag = (EMULATOR_REGISTERS[instruction.rformat.rx] & 0x80) > 0;
 		EMULATOR_REGISTERS[instruction.rformat.rx] <<= 1;
+		EMULATOR_REGISTERS[0xF] = flag;
 		break;
+	}
 	case CHIP8_SNE_VX_VY:
 		if (EMULATOR_REGISTERS[instruction.rformat.rx] !=
 		    EMULATOR_REGISTERS[instruction.rformat.ry]) {
@@ -267,18 +277,21 @@ bool next_instruction() {
 	case CHIP8_RND_VX_BYTE:
 		return false;
 	case CHIP8_DRW_VX_VY_NIBBLE: {
+		bool flag = false;
 		int origin_x = EMULATOR_REGISTERS[instruction.rformat.rx];
 		int origin_y = EMULATOR_REGISTERS[instruction.rformat.ry];
-		EMULATOR_REGISTERS[0xF] = pixel(origin_x, origin_y) > 0;
 		for (int row = 0; row < instruction.rformat.imm; ++row) {
 			uint8_t byte = EMULATOR_MEMORY[EMULATOR_VI + row];
 			int y = (origin_y + row) % TARGET_HEIGHT;
 			for (uint8_t col = 0; col < 8 && byte; ++col) {
 				int x = (origin_x + col) % TARGET_WIDTH;
-				draw(x, y, byte & 0x80);
+				uint8_t state = byte & 0x80;
+				flag = pixel(x, y) > 0 && state;
+				draw(x, y, state);
 				byte <<= 1;
 			}
 		}
+		EMULATOR_REGISTERS[0xF] = flag;
 		break;
 	}
 	case CHIP8_SKP_VX:
