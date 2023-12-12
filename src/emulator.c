@@ -156,16 +156,17 @@ void dump_state() {
 }
 
 bool next_instruction() {
-	static Chip8Instruction previous;
+	static uint16_t previous;
 	if (EMULATOR_PC < 0 || EMULATOR_PC > sizeof(EMULATOR_MEMORY)) {
 		fprintf(stderr, "[!] PC exceeds memory limit");
 		return false;
 	}
 
 	Chip8Instruction instruction = bytes2inst(&EMULATOR_MEMORY[EMULATOR_PC]);
-	if (instruction.raw != previous.raw) {
+	if (EMULATOR_PC != previous) {
 		print_asm(instruction);
 	}
+	previous = EMULATOR_PC;
 	EMULATOR_PC += 2;
 
 	switch (instruction_type(instruction)) {
@@ -322,7 +323,6 @@ bool next_instruction() {
 		return false;
 	}
 
-	previous = instruction;
 	return true;
 }
 
