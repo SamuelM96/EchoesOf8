@@ -189,7 +189,8 @@ bool next_instruction() {
 		EMULATOR_REGISTERS[instruction.iformat.reg] = instruction.iformat.imm;
 		break;
 	case CHIP8_ADD_VX_BYTE:
-		return false;
+		EMULATOR_REGISTERS[instruction.iformat.reg] += instruction.iformat.imm;
+		break;
 	case CHIP8_LD_VX_VY:
 		EMULATOR_REGISTERS[instruction.rformat.rx] =
 			EMULATOR_REGISTERS[instruction.rformat.ry];
