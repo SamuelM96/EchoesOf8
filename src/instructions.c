@@ -43,49 +43,49 @@ void print_asm(Chip8Instruction instruction) {
 		printf("CALL %#03x", instruction.aformat.addr);
 		break;
 	case CHIP8_SE_VX_BYTE:
-		printf("SE V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
+		printf("SE V%hX, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
 	case CHIP8_SNE_VX_BYTE:
-		printf("SNE V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
+		printf("SNE V%hX, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
 	case CHIP8_SE_VX_VY:
-		printf("SE V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("SE V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_LD_VX_BYTE:
-		printf("LD V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
+		printf("LD V%hX, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
 	case CHIP8_ADD_VX_BYTE:
-		printf("ADD V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
+		printf("ADD V%hX, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
 	case CHIP8_LD_VX_VY:
-		printf("LD V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("LD V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_OR_VX_VY:
-		printf("OR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("OR V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_AND_VX_VY:
-		printf("AND V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("AND V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_XOR_VX_VY:
-		printf("XOR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("XOR V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_ADD_VX_VY:
-		printf("ADD V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("ADD V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_SUB_VX_VY:
-		printf("SUB V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("SUB V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_SHR_VX:
-		printf("SHR V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("SHR V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_SUBN_VX_VY:
-		printf("SUBN V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("SUBN V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_SHL_VX:
-		printf("SHL V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("SHL V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_SNE_VX_VY:
-		printf("SNE V%d, V%d", instruction.rformat.rx, instruction.rformat.ry);
+		printf("SNE V%hX, V%hX", instruction.rformat.rx, instruction.rformat.ry);
 		break;
 	case CHIP8_LD_I_ADDR:
 		printf("LD I, %#03x", instruction.aformat.addr);
@@ -94,44 +94,44 @@ void print_asm(Chip8Instruction instruction) {
 		printf("JMP V0, %#03x", instruction.aformat.addr);
 		break;
 	case CHIP8_RND_VX_BYTE:
-		printf("RND V%d, %#02x", instruction.iformat.reg, instruction.iformat.imm);
+		printf("RND V%hX, %#02x", instruction.iformat.reg, instruction.iformat.imm);
 		break;
 	case CHIP8_DRW_VX_VY_NIBBLE:
-		printf("DRW V%d, V%d, %d", instruction.rformat.rx, instruction.rformat.ry,
+		printf("DRW V%hX, V%hX, %d", instruction.rformat.rx, instruction.rformat.ry,
 		       instruction.rformat.imm);
 		break;
 	case CHIP8_SKP_VX:
-		printf("SKP V%d", instruction.iformat.reg);
+		printf("SKP V%hX", instruction.iformat.reg);
 		break;
 	case CHIP8_SKNP_VX:
-		printf("SKNP V%d", instruction.iformat.reg);
+		printf("SKNP V%hX", instruction.iformat.reg);
 		break;
 	case CHIP8_LD_VX_DT:
-		printf("LD V%d, DT", instruction.iformat.reg);
+		printf("LD V%hX, DT", instruction.iformat.reg);
 		break;
 	case CHIP8_LD_VX_K:
-		printf("LD V%d, K", instruction.iformat.reg);
+		printf("LD V%hX, K", instruction.iformat.reg);
 		break;
 	case CHIP8_LD_DT_VX:
-		printf("LD DT, V%d", instruction.iformat.reg);
+		printf("LD DT, V%hX", instruction.iformat.reg);
 		break;
 	case CHIP8_LD_ST_VX:
-		printf("LD ST, V%d", instruction.iformat.reg);
+		printf("LD ST, V%hX", instruction.iformat.reg);
 		break;
 	case CHIP8_ADD_I_VX:
-		printf("ADD I, V%d", instruction.iformat.reg);
+		printf("ADD I, V%hX", instruction.iformat.reg);
 		break;
 	case CHIP8_LD_F_VX:
-		printf("LD F, V%d", instruction.iformat.reg);
+		printf("LD F, V%hX", instruction.iformat.reg);
 		break;
 	case CHIP8_LD_B_VX:
-		printf("LD B, V%d", instruction.iformat.reg);
+		printf("LD B, V%hX", instruction.iformat.reg);
 		break;
 	case CHIP8_LD_I_VX:
-		printf("LD [I], V%d", instruction.iformat.reg);
+		printf("LD [I], V%hX", instruction.iformat.reg);
 		break;
 	case CHIP8_LD_VX_I:
-		printf("LD V%d, [I]", instruction.iformat.reg);
+		printf("LD V%hX, [I]", instruction.iformat.reg);
 		break;
 	default:
 		printf("unknown");

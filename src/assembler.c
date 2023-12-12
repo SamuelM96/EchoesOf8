@@ -36,6 +36,7 @@ static inline char *next_arg(char *args) {
 }
 
 Chip8Instruction parse_line(char *line, char **out_label) {
+	// TODO: Handle registers as hex, e.g., VF vs V15
 	*out_label = NULL;
 	char *opcode = line;
 	while (!isspace((unsigned char)*opcode)) {
