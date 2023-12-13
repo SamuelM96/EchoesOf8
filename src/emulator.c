@@ -344,9 +344,8 @@ bool next_instruction() {
 		g_emulator.pc = g_emulator.stack[--g_emulator.sp];
 		break;
 	case CHIP8_SYS_ADDR:
-		fprintf(stderr, "[!] SYS instructions not supported: 0x%04hx @ 0x%03hx\n",
-			instruction.raw, g_emulator.pc);
-		return false;
+		// Ignore
+		break;
 	case CHIP8_JMP_ADDR:
 		g_emulator.pc = instruction.aformat.addr;
 		break;
@@ -438,9 +437,12 @@ bool next_instruction() {
 		g_emulator.vi = instruction.aformat.addr;
 		break;
 	case CHIP8_JMP_V0_ADDR:
-		return false;
+		g_emulator.pc = instruction.aformat.addr + g_emulator.registers[0];
+		break;
 	case CHIP8_RND_VX_BYTE:
-		return false;
+		g_emulator.registers[instruction.iformat.reg] = (rand() % 256) &
+								instruction.iformat.imm;
+		break;
 	case CHIP8_DRW_VX_VY_NIBBLE: {
 		bool flag = false;
 		int origin_x = g_emulator.registers[instruction.rformat.rx];
@@ -535,6 +537,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 			// Handle overflow
 			g_last_time = g_current_time;
 		}
+
 		if (!g_debug) {
 			if (g_emulator.waiting_for_key > 0) {
 				if (g_emulator.keyboard[g_emulator.waiting_for_key]) {
