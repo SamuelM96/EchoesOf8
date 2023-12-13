@@ -84,9 +84,6 @@ typedef struct EMULATOR_STATE {
 
 	// Keyboard state, 1 = Pressed
 	uint8_t keyboard[16];
-
-	int8_t waiting_for_key;
-	bool has_pressed;
 } EMULATOR_STATE;
 
 EMULATOR_STATE g_emulator;
@@ -159,8 +156,6 @@ void reset_state() {
 	g_emulator.st = 0;
 
 	g_debug = false;
-	g_emulator.waiting_for_key = -1;
-	g_emulator.has_pressed = false;
 
 	g_last_time = clock();
 	g_current_time = g_last_time;
@@ -476,12 +471,22 @@ bool next_instruction(bool trace) {
 	case CHIP8_LD_VX_DT:
 		g_emulator.registers[instruction.iformat.reg] = g_emulator.dt;
 		break;
-	case CHIP8_LD_VX_K:
-		g_emulator.waiting_for_key = g_emulator.registers[instruction.iformat.reg];
-		// Storing early should be fine since processing is halted
-		g_emulator.registers[instruction.iformat.reg] = g_emulator.waiting_for_key;
-		printf("Waiting for key: %X\n", g_emulator.waiting_for_key);
+	case CHIP8_LD_VX_K: {
+		static bool has_pressed;
+		uint8_t key = g_emulator.registers[instruction.iformat.reg];
+		if (g_emulator.keyboard[key]) {
+			has_pressed = true;
+		} else if (has_pressed) {
+			g_emulator.registers[instruction.iformat.reg] = key;
+			has_pressed = false;
+			break;
+		} else {
+			printf("Waiting for key: %X\n", key);
+			has_pressed = false;
+		}
+		g_emulator.pc -= 2;
 		break;
+	}
 	case CHIP8_LD_DT_VX:
 		g_emulator.dt = g_emulator.registers[instruction.iformat.reg];
 		break;
@@ -543,24 +548,14 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 		}
 
 		if (!g_debug) {
-			if (g_emulator.waiting_for_key > 0) {
-				if (g_emulator.keyboard[g_emulator.waiting_for_key]) {
-					g_emulator.has_pressed = true;
-				} else if (g_emulator.has_pressed) {
-					g_emulator.waiting_for_key = -1;
-					g_emulator.has_pressed = false;
-				}
-			} else {
-				if (!next_instruction(false)) {
-					dump_state();
-					g_debug = true;
-					printf("\n[!] Something went wrong @ 0x%03hx: ",
-					       g_emulator.pc);
-					print_asm(
-						bytes2inst(g_emulator.memory + g_emulator.pc - 2));
-					printf("\n");
-				}
+			if (!next_instruction(false)) {
+				dump_state();
+				g_debug = true;
+				printf("\n[!] Something went wrong @ 0x%03hx: ", g_emulator.pc);
+				print_asm(bytes2inst(g_emulator.memory + g_emulator.pc - 2));
+				printf("\n");
 			}
+
 			// TODO: How to handle timers when debugging?
 			if (g_current_time - g_last_time >= EMULATOR_INTERVAL) {
 				g_last_time = g_current_time;
