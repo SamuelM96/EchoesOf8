@@ -336,6 +336,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 	switch (instruction_type(instruction)) {
 	case CHIP8_CLS:
 		memset(emulator->display, 0, sizeof(emulator->display));
+		render(emulator->display, TARGET_WIDTH);
 		break;
 	case CHIP8_RET:
 		emulator->pc = emulator->stack[--emulator->sp];
@@ -456,6 +457,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 			}
 		}
 		emulator->registers[0xF] = flag;
+		render(emulator->display, TARGET_WIDTH);
 		break;
 	}
 	case CHIP8_SKP_VX:
@@ -579,7 +581,6 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 				}
 			}
 		}
-		render(emulator.display, TARGET_WIDTH);
 	}
 
 	cleanup();
