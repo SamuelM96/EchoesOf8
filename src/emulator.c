@@ -454,7 +454,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 			for (uint8_t col = 0; col < 8 && byte; ++col) {
 				int x = (origin_x + col) % TARGET_WIDTH;
 				uint8_t state = byte & 0x80;
-				flag = pixel(emulator, x, y) > 0 && state;
+				flag |= pixel(emulator, x, y) > 0 && state;
 				pixel(emulator, x, y) ^= state ? 0xFF97F1CD : 0;
 				byte <<= 1;
 			}
