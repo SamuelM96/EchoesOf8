@@ -19,8 +19,10 @@
 #include <string.h>
 #include <time.h>
 
+#define FONT_BASE_ADDR 0x050
+
 #define TARGET_HZ 60
-#define INSTRUCTIONS_PER_SEC 700
+#define INSTRUCTIONS_PER_SEC 1000
 const clock_t EMULATOR_INTERVAL = CLOCKS_PER_SEC / TARGET_HZ;
 const clock_t INSTRUCTION_INTERVAL = CLOCKS_PER_SEC / INSTRUCTIONS_PER_SEC;
 clock_t g_last_inst_time;
