@@ -31,6 +31,26 @@ clock_t g_current_time;
 const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
 const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
 
+const uint8_t EMULATOR_FONTS[80] = {
+	// https://tobiasvl.github.io/blog/write-a-chip-8-emulator/#fx29-font-character
+	0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+	0x20, 0x60, 0x20, 0x20, 0x70, // 1
+	0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+	0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+	0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+	0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+	0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+	0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+	0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+	0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+	0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+	0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+	0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+	0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+	0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+	0xF0, 0x80, 0xF0, 0x80, 0x80 // F
+};
+
 typedef struct EMULATOR_STATE {
 	// 0x000 - 0x1FF = Interpreter memory, not for programs
 	// Programs start at 0x200 (512)
@@ -76,6 +96,7 @@ SDL_Window *g_window = NULL;
 SDL_Renderer *g_renderer = NULL;
 SDL_Texture *g_texture = NULL;
 
+#define font(f) g_emulator.memory[0x050 + (f) * 5]
 #define pixel(x, y) g_emulator.display[(y) * TARGET_WIDTH + (x)]
 #define draw(x, y, state)                                  \
 	do {                                               \
@@ -126,6 +147,9 @@ void reset_state() {
 	memset(g_emulator.stack, 0, sizeof(g_emulator.stack));
 	memset(g_emulator.registers, 0, sizeof(g_emulator.registers));
 	memset(g_emulator.display, 0, sizeof(g_emulator.display));
+	memset(g_emulator.keyboard, 0, sizeof(g_emulator.keyboard));
+
+	memcpy(g_emulator.memory + 0x050, EMULATOR_FONTS, sizeof(EMULATOR_FONTS));
 
 	g_emulator.sp = 0;
 	g_emulator.vi = 0;
@@ -462,7 +486,8 @@ bool next_instruction() {
 		g_emulator.vi += g_emulator.registers[instruction.iformat.reg];
 		break;
 	case CHIP8_LD_F_VX:
-		return false;
+		g_emulator.vi = font(g_emulator.registers[instruction.iformat.reg]);
+		break;
 	case CHIP8_LD_B_VX: {
 		uint8_t digit = g_emulator.registers[instruction.iformat.reg];
 		g_emulator.memory[g_emulator.vi + 2] = digit % 10;
