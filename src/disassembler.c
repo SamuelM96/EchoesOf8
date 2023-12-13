@@ -72,6 +72,7 @@ void disassemble_rd(uint8_t *code, size_t length, size_t base) {
 			printf("0x%08zx  %04hx    ", base + ip, instruction.raw);
 
 			print_asm(instruction);
+			printf("\n");
 
 			if (instruction.raw == 0x00EE) {
 				break;
@@ -129,5 +130,6 @@ void disassemble_linear(uint8_t *code, size_t length, size_t base) {
 		Chip8Instruction instruction = bytes2inst(code + ip);
 		printf("0x%08zx  %04hx    ", base + ip, instruction.raw);
 		print_asm(instruction);
+		printf("\n");
 	}
 }
