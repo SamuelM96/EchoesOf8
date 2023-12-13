@@ -15,7 +15,14 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+#define TARGET_HZ 60
+const clock_t EMULATOR_INTERVAL = CLOCKS_PER_SEC / TARGET_HZ;
+clock_t g_last_time;
+clock_t g_current_time;
 
 #define TARGET_WIDTH 64
 #define TARGET_HEIGHT 32
@@ -122,6 +129,9 @@ void reset_state() {
 	g_emulator.st = 0;
 
 	g_debug = false;
+
+	g_last_time = clock();
+	g_current_time = g_last_time;
 }
 
 void init_graphics() {
@@ -358,13 +368,16 @@ bool next_instruction() {
 	case CHIP8_SKNP_VX:
 		return false;
 	case CHIP8_LD_VX_DT:
-		return false;
+		g_emulator.registers[instruction.iformat.reg] = g_emulator.dt;
+		break;
 	case CHIP8_LD_VX_K:
 		return false;
 	case CHIP8_LD_DT_VX:
-		return false;
+		g_emulator.dt = g_emulator.registers[instruction.iformat.reg];
+		break;
 	case CHIP8_LD_ST_VX:
-		return false;
+		g_emulator.st = g_emulator.registers[instruction.iformat.reg];
+		break;
 	case CHIP8_ADD_I_VX:
 		g_emulator.vi += g_emulator.registers[instruction.iformat.reg];
 		break;
@@ -401,6 +414,7 @@ bool next_instruction() {
 void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	printf("Emulating!\n");
 
+	srand(time(NULL));
 	reset_state();
 	init_graphics();
 
@@ -411,10 +425,25 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 		printf("Debugging enabled!\n");
 	}
 	while (handle_input()) {
+		g_current_time = clock();
+		if (g_current_time < g_last_time) {
+			// Handle overflow
+			g_last_time = g_current_time;
+		}
 		if (!g_debug) {
 			if (!next_instruction()) {
 				dump_state();
 				g_debug = true;
+			// TODO: How to handle timers when debugging?
+			if (g_current_time - g_last_time >= EMULATOR_INTERVAL) {
+				g_last_time = g_current_time;
+				if (g_emulator.dt > 0) {
+					g_emulator.dt--;
+				}
+				if (g_emulator.st > 0) {
+					g_emulator.st--;
+					// TODO: Make a beep
+				}
 			}
 		}
 		render();
