@@ -472,18 +472,26 @@ bool next_instruction(bool trace) {
 		g_emulator.registers[instruction.iformat.reg] = g_emulator.dt;
 		break;
 	case CHIP8_LD_VX_K: {
-		static bool has_pressed;
-		uint8_t key = g_emulator.registers[instruction.iformat.reg];
-		if (g_emulator.keyboard[key]) {
-			has_pressed = true;
-		} else if (has_pressed) {
-			g_emulator.registers[instruction.iformat.reg] = key;
-			has_pressed = false;
-			break;
-		} else {
-			printf("Waiting for key: %X\n", key);
-			has_pressed = false;
+		static int8_t key = -1;
+		static bool is_held = false;
+
+		bool is_pressed = false;
+		for (int i = 0; i < sizeof(g_emulator.keyboard); ++i) {
+			if (g_emulator.keyboard[i]) {
+				is_pressed = true;
+				key = i;
+				break;
+			}
 		}
+
+		if (is_pressed) {
+			is_held = true;
+		} else if (is_held) {
+			g_emulator.registers[instruction.iformat.reg] = key;
+			is_held = false;
+			break;
+		}
+
 		g_emulator.pc -= 2;
 		break;
 	}
