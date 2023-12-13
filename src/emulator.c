@@ -96,12 +96,24 @@ SDL_Texture *g_texture = NULL;
 
 #define font(f) g_emulator.memory[0x050 + (f) * 5]
 #define pixel(x, y) g_emulator.display[(y) * TARGET_WIDTH + (x)]
-#define draw(x, y, state)                                  \
-	do {                                               \
-		pixel((x), (y)) ^= state ? 0xFF97F1CD : 0; \
-	} while (false)
 
-bool next_instruction(bool trace);
+bool process_instruction(Chip8Instruction);
+void print_instruction_state(Chip8Instruction instruction);
+
+Chip8Instruction fetch_next(bool trace) {
+	static uint16_t prev_inst_addr = 0;
+	Chip8Instruction instruction = bytes2inst(&g_emulator.memory[g_emulator.pc]);
+	if (g_emulator.pc != prev_inst_addr && trace) {
+		print_asm(instruction);
+		printf("\t");
+		print_instruction_state(instruction);
+		printf("\n");
+	}
+	prev_inst_addr = g_emulator.pc;
+	g_emulator.pc += 2;
+
+	return instruction;
+}
 
 void dump_registers() {
 	fprintf(stderr, "===== REGISTERS DUMP ====\n");
@@ -184,52 +196,52 @@ void init_graphics() {
 void update_keyboard_state(SDL_Scancode scancode, uint8_t state) {
 	bool keypad_pressed = true;
 	switch (scancode) {
-	case SDL_SCANCODE_1: // 1
+	case SDL_SCANCODE_1:
 		g_emulator.keyboard[0x1] = state;
 		break;
-	case SDL_SCANCODE_2: // 2
+	case SDL_SCANCODE_2:
 		g_emulator.keyboard[0x2] = state;
 		break;
-	case SDL_SCANCODE_3: // 3
+	case SDL_SCANCODE_3:
 		g_emulator.keyboard[0x3] = state;
 		break;
-	case SDL_SCANCODE_4: // C
+	case SDL_SCANCODE_4:
 		g_emulator.keyboard[0xC] = state;
 		break;
-	case SDL_SCANCODE_Q: // 4
+	case SDL_SCANCODE_Q:
 		g_emulator.keyboard[0x4] = state;
 		break;
-	case SDL_SCANCODE_W: // 5
+	case SDL_SCANCODE_W:
 		g_emulator.keyboard[0x5] = state;
 		break;
-	case SDL_SCANCODE_E: // 6
+	case SDL_SCANCODE_E:
 		g_emulator.keyboard[0x6] = state;
 		break;
-	case SDL_SCANCODE_R: // D
+	case SDL_SCANCODE_R:
 		g_emulator.keyboard[0xD] = state;
 		break;
-	case SDL_SCANCODE_A: // 7
+	case SDL_SCANCODE_A:
 		g_emulator.keyboard[0x7] = state;
 		break;
-	case SDL_SCANCODE_S: // 8
+	case SDL_SCANCODE_S:
 		g_emulator.keyboard[0x8] = state;
 		break;
-	case SDL_SCANCODE_D: // 9
+	case SDL_SCANCODE_D:
 		g_emulator.keyboard[0x9] = state;
 		break;
-	case SDL_SCANCODE_F: // E
+	case SDL_SCANCODE_F:
 		g_emulator.keyboard[0xE] = state;
 		break;
-	case SDL_SCANCODE_Z: // A
+	case SDL_SCANCODE_Z:
 		g_emulator.keyboard[0xA] = state;
 		break;
-	case SDL_SCANCODE_X: // 0
+	case SDL_SCANCODE_X:
 		g_emulator.keyboard[0x0] = state;
 		break;
-	case SDL_SCANCODE_C: // B
+	case SDL_SCANCODE_C:
 		g_emulator.keyboard[0xB] = state;
 		break;
-	case SDL_SCANCODE_V: // F
+	case SDL_SCANCODE_V:
 		g_emulator.keyboard[0xF] = state;
 		break;
 	default:
@@ -264,7 +276,7 @@ bool handle_input() {
 				break;
 			case SDL_SCANCODE_N:
 				if (g_debug) {
-					next_instruction(true);
+					process_instruction(fetch_next(true));
 					dump_registers();
 					dump_stack();
 					printf("\n");
@@ -316,22 +328,11 @@ void print_instruction_state(Chip8Instruction instruction) {
 	}
 }
 
-bool next_instruction(bool trace) {
-	static uint16_t previous;
+bool process_instruction(Chip8Instruction instruction) {
 	if (g_emulator.pc < 0 || g_emulator.pc > sizeof(g_emulator.memory)) {
 		fprintf(stderr, "[!] PC exceeds memory boundaries\n");
 		return false;
 	}
-
-	Chip8Instruction instruction = bytes2inst(&g_emulator.memory[g_emulator.pc]);
-	if (g_emulator.pc != previous && trace) {
-		print_asm(instruction);
-		printf("\t");
-		print_instruction_state(instruction);
-		printf("\n");
-	}
-	previous = g_emulator.pc;
-	g_emulator.pc += 2;
 
 	switch (instruction_type(instruction)) {
 	case CHIP8_CLS:
@@ -451,7 +452,7 @@ bool next_instruction(bool trace) {
 				int x = (origin_x + col) % TARGET_WIDTH;
 				uint8_t state = byte & 0x80;
 				flag = pixel(x, y) > 0 && state;
-				draw(x, y, state);
+				pixel((x), (y)) ^= state ? 0xFF97F1CD : 0;
 				byte <<= 1;
 			}
 		}
@@ -556,7 +557,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 		}
 
 		if (!g_debug) {
-			if (!next_instruction(false)) {
+			if (!process_instruction(fetch_next(false))) {
 				dump_state();
 				g_debug = true;
 				printf("\n[!] Something went wrong @ 0x%03hx: ", g_emulator.pc);
