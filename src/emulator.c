@@ -76,7 +76,6 @@ SDL_Window *g_window = NULL;
 SDL_Renderer *g_renderer = NULL;
 SDL_Texture *g_texture = NULL;
 
-#define font(emulator, f) (emulator)->memory[0x050 + (f) * 5]
 #define pixel(emulator, x, y) (emulator)->display[(y) * TARGET_WIDTH + (x)]
 
 bool process_instruction(EmulatorState *, Chip8Instruction);
@@ -160,7 +159,7 @@ void reset_state(EmulatorState *emulator) {
 		0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
 		0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 	};
-	memcpy(emulator->memory + 0x050, emulator_fonts, sizeof(emulator_fonts));
+	memcpy(emulator->memory + FONT_BASE_ADDR, emulator_fonts, sizeof(emulator_fonts));
 
 	emulator->sp = 0;
 	emulator->vi = 0;
@@ -509,7 +508,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		emulator->vi += emulator->registers[instruction.iformat.reg];
 		break;
 	case CHIP8_LD_F_VX:
-		emulator->vi = font(emulator, emulator->registers[instruction.iformat.reg]);
+		emulator->vi = FONT_BASE_ADDR + emulator->registers[instruction.iformat.reg] * 5;
 		break;
 	case CHIP8_LD_B_VX: {
 		uint8_t digit = emulator->registers[instruction.iformat.reg];
