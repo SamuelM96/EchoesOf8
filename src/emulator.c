@@ -20,8 +20,11 @@
 #include <time.h>
 
 #define TARGET_HZ 60
+#define INSTRUCTIONS_PER_SEC 700
 const clock_t EMULATOR_INTERVAL = CLOCKS_PER_SEC / TARGET_HZ;
-clock_t g_last_time;
+const clock_t INSTRUCTION_INTERVAL = CLOCKS_PER_SEC / INSTRUCTIONS_PER_SEC;
+clock_t g_last_inst_time;
+clock_t g_last_timer_time;
 clock_t g_current_time;
 
 #define TARGET_WIDTH 64
@@ -167,8 +170,8 @@ void reset_state(EmulatorState *emulator) {
 
 	g_debug = false;
 
-	g_last_time = clock();
-	g_current_time = g_last_time;
+	g_last_timer_time = clock();
+	g_current_time = g_last_timer_time;
 }
 
 void init_graphics() {
@@ -293,7 +296,6 @@ bool handle_input(EmulatorState *emulator) {
 }
 
 void render(uint32_t *pixels, int width) {
-	;
 	SDL_SetRenderTarget(g_renderer, g_texture);
 	SDL_UpdateTexture(g_texture, NULL, pixels, width * sizeof(uint32_t));
 
@@ -554,24 +556,28 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	}
 	while (handle_input(&emulator)) {
 		g_current_time = clock();
-		if (g_current_time < g_last_time) {
+		if (g_current_time < g_last_timer_time) {
 			// Handle overflow
-			g_last_time = g_current_time;
+			g_last_timer_time = g_current_time;
 		}
 
 		if (!g_debug) {
-			Chip8Instruction instruction = fetch_next(&emulator, false);
-			if (!process_instruction(&emulator, instruction)) {
-				dump_state(&emulator);
-				g_debug = true;
-				printf("\n[!] Something went wrong @ 0x%03hx: ", emulator.pc - 2);
-				print_asm(instruction);
-				printf("\n");
+			if (g_current_time - g_last_inst_time >= INSTRUCTION_INTERVAL) {
+				g_last_inst_time = g_current_time;
+				Chip8Instruction instruction = fetch_next(&emulator, false);
+				if (!process_instruction(&emulator, instruction)) {
+					dump_state(&emulator);
+					g_debug = true;
+					printf("\n[!] Something went wrong @ 0x%03hx: ",
+					       emulator.pc - 2);
+					print_asm(instruction);
+					printf("\n");
+				}
 			}
 
 			// TODO: How to handle timers when debugging?
-			if (g_current_time - g_last_time >= EMULATOR_INTERVAL) {
-				g_last_time = g_current_time;
+			if (g_current_time - g_last_timer_time >= EMULATOR_INTERVAL) {
+				g_last_timer_time = g_current_time;
 				if (emulator.dt > 0) {
 					emulator.dt--;
 				}
