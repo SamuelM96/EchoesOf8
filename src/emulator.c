@@ -86,6 +86,7 @@ typedef struct EMULATOR_STATE {
 	uint8_t keyboard[16];
 
 	int8_t waiting_for_key;
+	bool has_pressed;
 } EMULATOR_STATE;
 
 EMULATOR_STATE g_emulator;
@@ -103,7 +104,7 @@ SDL_Texture *g_texture = NULL;
 		pixel((x), (y)) ^= state ? 0xFF97F1CD : 0; \
 	} while (false)
 
-bool next_instruction();
+bool next_instruction(bool trace);
 
 void dump_registers() {
 	fprintf(stderr, "===== REGISTERS DUMP ====\n");
@@ -139,7 +140,7 @@ static inline void dump_memory() {
 void dump_state() {
 	dump_registers();
 	dump_stack();
-	dump_memory();
+	// dump_memory();
 }
 
 void reset_state() {
@@ -159,6 +160,7 @@ void reset_state() {
 
 	g_debug = false;
 	g_emulator.waiting_for_key = -1;
+	g_emulator.has_pressed = false;
 
 	g_last_time = clock();
 	g_current_time = g_last_time;
@@ -267,7 +269,7 @@ bool handle_input() {
 				break;
 			case SDL_SCANCODE_N:
 				if (g_debug) {
-					next_instruction();
+					next_instruction(true);
 					dump_registers();
 					dump_stack();
 					printf("\n");
@@ -319,7 +321,7 @@ void print_instruction_state(Chip8Instruction instruction) {
 	}
 }
 
-bool next_instruction() {
+bool next_instruction(bool trace) {
 	static uint16_t previous;
 	if (g_emulator.pc < 0 || g_emulator.pc > sizeof(g_emulator.memory)) {
 		fprintf(stderr, "[!] PC exceeds memory boundaries\n");
@@ -327,7 +329,7 @@ bool next_instruction() {
 	}
 
 	Chip8Instruction instruction = bytes2inst(&g_emulator.memory[g_emulator.pc]);
-	if (g_emulator.pc != previous) {
+	if (g_emulator.pc != previous && trace) {
 		print_asm(instruction);
 		printf("\t");
 		print_instruction_state(instruction);
@@ -462,13 +464,12 @@ bool next_instruction() {
 		break;
 	}
 	case CHIP8_SKP_VX:
-		if (g_emulator.keyboard[instruction.iformat.reg]) {
-			printf("Key %hX pressed!\n", instruction.iformat.reg);
+		if (g_emulator.keyboard[g_emulator.registers[instruction.iformat.reg]]) {
 			g_emulator.pc += 2;
 		}
 		break;
 	case CHIP8_SKNP_VX:
-		if (g_emulator.keyboard[instruction.iformat.reg] == 0) {
+		if (g_emulator.keyboard[g_emulator.registers[instruction.iformat.reg]] == 0) {
 			g_emulator.pc += 2;
 		}
 		break;
@@ -476,7 +477,10 @@ bool next_instruction() {
 		g_emulator.registers[instruction.iformat.reg] = g_emulator.dt;
 		break;
 	case CHIP8_LD_VX_K:
-		g_emulator.waiting_for_key = instruction.iformat.reg;
+		g_emulator.waiting_for_key = g_emulator.registers[instruction.iformat.reg];
+		// Storing early should be fine since processing is halted
+		g_emulator.registers[instruction.iformat.reg] = g_emulator.waiting_for_key;
+		printf("Waiting for key: %X\n", g_emulator.waiting_for_key);
 		break;
 	case CHIP8_LD_DT_VX:
 		g_emulator.dt = g_emulator.registers[instruction.iformat.reg];
@@ -541,15 +545,19 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 		if (!g_debug) {
 			if (g_emulator.waiting_for_key > 0) {
 				if (g_emulator.keyboard[g_emulator.waiting_for_key]) {
+					g_emulator.has_pressed = true;
+				} else if (g_emulator.has_pressed) {
 					g_emulator.waiting_for_key = -1;
+					g_emulator.has_pressed = false;
 				}
 			} else {
-				if (!next_instruction()) {
+				if (!next_instruction(false)) {
 					dump_state();
 					g_debug = true;
 					printf("\n[!] Something went wrong @ 0x%03hx: ",
 					       g_emulator.pc);
-					print_asm(bytes2inst(g_emulator.memory + g_emulator.pc));
+					print_asm(
+						bytes2inst(g_emulator.memory + g_emulator.pc - 2));
 					printf("\n");
 				}
 			}
