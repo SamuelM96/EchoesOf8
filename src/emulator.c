@@ -61,6 +61,11 @@ typedef struct EMULATOR_STATE {
 
 	// Display pixels
 	uint32_t display[TARGET_WIDTH * TARGET_HEIGHT];
+
+	// Keyboard state, 1 = Pressed
+	uint8_t keyboard[16];
+
+	int8_t waiting_for_key;
 } EMULATOR_STATE;
 
 EMULATOR_STATE g_emulator;
@@ -129,6 +134,7 @@ void reset_state() {
 	g_emulator.st = 0;
 
 	g_debug = false;
+	g_emulator.waiting_for_key = -1;
 
 	g_last_time = clock();
 	g_current_time = g_last_time;
@@ -154,6 +160,67 @@ void init_graphics() {
 	}
 }
 
+void update_keyboard_state(SDL_Scancode scancode, uint8_t state) {
+	bool keypad_pressed = true;
+	switch (scancode) {
+	case SDL_SCANCODE_1: // 1
+		g_emulator.keyboard[0x1] = state;
+		break;
+	case SDL_SCANCODE_2: // 2
+		g_emulator.keyboard[0x2] = state;
+		break;
+	case SDL_SCANCODE_3: // 3
+		g_emulator.keyboard[0x3] = state;
+		break;
+	case SDL_SCANCODE_4: // C
+		g_emulator.keyboard[0xC] = state;
+		break;
+	case SDL_SCANCODE_Q: // 4
+		g_emulator.keyboard[0x4] = state;
+		break;
+	case SDL_SCANCODE_W: // 5
+		g_emulator.keyboard[0x5] = state;
+		break;
+	case SDL_SCANCODE_E: // 6
+		g_emulator.keyboard[0x6] = state;
+		break;
+	case SDL_SCANCODE_R: // D
+		g_emulator.keyboard[0xD] = state;
+		break;
+	case SDL_SCANCODE_A: // 7
+		g_emulator.keyboard[0x7] = state;
+		break;
+	case SDL_SCANCODE_S: // 8
+		g_emulator.keyboard[0x8] = state;
+		break;
+	case SDL_SCANCODE_D: // 9
+		g_emulator.keyboard[0x9] = state;
+		break;
+	case SDL_SCANCODE_F: // E
+		g_emulator.keyboard[0xE] = state;
+		break;
+	case SDL_SCANCODE_Z: // A
+		g_emulator.keyboard[0xA] = state;
+		break;
+	case SDL_SCANCODE_X: // 0
+		g_emulator.keyboard[0x0] = state;
+		break;
+	case SDL_SCANCODE_C: // B
+		g_emulator.keyboard[0xB] = state;
+		break;
+	case SDL_SCANCODE_V: // F
+		g_emulator.keyboard[0xF] = state;
+		break;
+	default:
+		keypad_pressed = false;
+		break;
+	}
+
+	if (keypad_pressed) {
+		printf("Key %s: %s\n", state ? "down" : "up", SDL_GetScancodeName(scancode));
+	}
+}
+
 bool handle_input() {
 	SDL_Event e;
 	while (SDL_PollEvent(&e)) {
@@ -161,9 +228,13 @@ bool handle_input() {
 		case SDL_QUIT:
 			printf("Quitting...\n");
 			return false;
+		case SDL_KEYUP: {
+			update_keyboard_state(e.key.keysym.scancode, 0);
+			break;
+		}
 		case SDL_KEYDOWN: {
 			switch (e.key.keysym.scancode) {
-			case SDL_SCANCODE_Q:
+			case SDL_SCANCODE_ESCAPE:
 				printf("Quitting...\n");
 				return false;
 			case SDL_SCANCODE_SPACE:
@@ -179,11 +250,12 @@ bool handle_input() {
 				}
 				break;
 			default:
+				update_keyboard_state(e.key.keysym.scancode, 1);
 				break;
 			}
+			break;
 		}
 		}
-		break;
 	}
 
 	return true;
@@ -364,14 +436,22 @@ bool next_instruction() {
 		break;
 	}
 	case CHIP8_SKP_VX:
-		return false;
+		if (g_emulator.keyboard[instruction.iformat.reg]) {
+			printf("Key %hX pressed!\n", instruction.iformat.reg);
+			g_emulator.pc += 2;
+		}
+		break;
 	case CHIP8_SKNP_VX:
-		return false;
+		if (g_emulator.keyboard[instruction.iformat.reg] == 0) {
+			g_emulator.pc += 2;
+		}
+		break;
 	case CHIP8_LD_VX_DT:
 		g_emulator.registers[instruction.iformat.reg] = g_emulator.dt;
 		break;
 	case CHIP8_LD_VX_K:
-		return false;
+		g_emulator.waiting_for_key = instruction.iformat.reg;
+		break;
 	case CHIP8_LD_DT_VX:
 		g_emulator.dt = g_emulator.registers[instruction.iformat.reg];
 		break;
@@ -431,9 +511,20 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 			g_last_time = g_current_time;
 		}
 		if (!g_debug) {
-			if (!next_instruction()) {
-				dump_state();
-				g_debug = true;
+			if (g_emulator.waiting_for_key > 0) {
+				if (g_emulator.keyboard[g_emulator.waiting_for_key]) {
+					g_emulator.waiting_for_key = -1;
+				}
+			} else {
+				if (!next_instruction()) {
+					dump_state();
+					g_debug = true;
+					printf("\n[!] Something went wrong @ 0x%03hx: ",
+					       g_emulator.pc);
+					print_asm(bytes2inst(g_emulator.memory + g_emulator.pc));
+					printf("\n");
+				}
+			}
 			// TODO: How to handle timers when debugging?
 			if (g_current_time - g_last_time >= EMULATOR_INTERVAL) {
 				g_last_time = g_current_time;
