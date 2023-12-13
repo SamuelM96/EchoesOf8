@@ -557,6 +557,10 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	}
 	while (handle_input(&emulator)) {
 		g_current_time = clock();
+		if (g_current_time < g_last_inst_time) {
+			// Handle overflow
+			g_last_inst_time = g_current_time;
+		}
 		if (g_current_time < g_last_timer_time) {
 			// Handle overflow
 			g_last_timer_time = g_current_time;
