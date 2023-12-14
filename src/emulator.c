@@ -348,6 +348,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		break;
 	case CHIP8_SYS_ADDR:
 		// Ignore
+		fprintf(stderr, "[*] SYS attempt: 0x%04hx\n", instruction.raw);
 		break;
 	case CHIP8_JMP_ADDR:
 		emulator->pc = instruction.aformat.addr;
