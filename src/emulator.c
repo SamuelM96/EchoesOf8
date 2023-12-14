@@ -22,6 +22,7 @@
 #define CONFIG_CHIP8_SHIFT 0b1
 #define CONFIG_CHIP8_JMP0 0b10
 #define CONFIG_CHIP8_LD_I 0b100
+#define CONFIG_CHIP8_CLIPPING 0b1000
 
 #define FONT_BASE_ADDR 0x050
 
@@ -472,13 +473,23 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		break;
 	case CHIP8_DRW_VX_VY_NIBBLE: {
 		bool flag = false;
-		int origin_x = emulator->registers[instruction.rformat.rx];
-		int origin_y = emulator->registers[instruction.rformat.ry];
-		for (int row = 0; row < instruction.rformat.imm; ++row) {
+		int origin_x = emulator->registers[instruction.rformat.rx] % TARGET_WIDTH;
+		int origin_y = emulator->registers[instruction.rformat.ry] % TARGET_HEIGHT;
+		int max_row = instruction.rformat.imm;
+		int max_col = 8;
+
+		if (emulator->configuration & CONFIG_CHIP8_CLIPPING) {
+			max_row = origin_y + max_row > TARGET_HEIGHT ? TARGET_HEIGHT - origin_y :
+								       max_row;
+			max_col = origin_x + max_col > TARGET_WIDTH ? TARGET_WIDTH - origin_x :
+								      max_col;
+		}
+
+		for (int row = 0; row < max_row; ++row) {
 			uint8_t byte = emulator->memory[emulator->vi + row];
-			int y = (origin_y + row) % TARGET_HEIGHT;
-			for (uint8_t col = 0; col < 8 && byte; ++col) {
-				int x = (origin_x + col) % TARGET_WIDTH;
+			int y = origin_y + row;
+			for (uint8_t col = 0; col < max_col && byte; ++col) {
+				int x = origin_x + col;
 				uint8_t state = byte & 0x80;
 				flag |= pixel(emulator, x, y) > 0 && state;
 				pixel(emulator, x, y) ^= state ? PIXEL_COLOUR : 0;
@@ -575,7 +586,8 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	printf("Emulating!\n");
 
 	EmulatorState emulator = { 0 };
-	emulator.configuration = CONFIG_CHIP8_SHIFT | CONFIG_CHIP8_JMP0;
+	emulator.configuration = CONFIG_CHIP8_SHIFT | CONFIG_CHIP8_JMP0 | CONFIG_CHIP8_LD_I |
+				 CONFIG_CHIP8_CLIPPING;
 
 	srand(time(NULL));
 	reset_state(&emulator);
