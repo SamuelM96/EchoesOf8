@@ -393,14 +393,17 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 	case CHIP8_OR_VX_VY:
 		emulator->registers[instruction.rformat.rx] |=
 			emulator->registers[instruction.rformat.ry];
+		emulator->registers[0xF] = 0;
 		break;
 	case CHIP8_AND_VX_VY:
 		emulator->registers[instruction.rformat.rx] &=
 			emulator->registers[instruction.rformat.ry];
+		emulator->registers[0xF] = 0;
 		break;
 	case CHIP8_XOR_VX_VY:
 		emulator->registers[instruction.rformat.rx] ^=
 			emulator->registers[instruction.rformat.ry];
+		emulator->registers[0xF] = 0;
 		break;
 	case CHIP8_ADD_VX_VY: {
 		uint16_t result = emulator->registers[instruction.rformat.rx] +
