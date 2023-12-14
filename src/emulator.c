@@ -19,6 +19,8 @@
 #include <string.h>
 #include <time.h>
 
+#define ORIGINAL_CHIP8_SHIFT
+
 #define FONT_BASE_ADDR 0x050
 
 #define NANOSECONDS_PER_SECOND 1000000000
@@ -411,6 +413,10 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		break;
 	}
 	case CHIP8_SHR_VX: {
+#ifdef ORIGINAL_CHIP8_SHIFT
+		emulator->registers[instruction.rformat.rx] =
+			emulator->registers[instruction.rformat.ry];
+#endif /* ifdef ORIGINAL_CHIP8_SHIFT */
 		bool flag = emulator->registers[instruction.rformat.rx] & 1;
 		emulator->registers[instruction.rformat.rx] >>= 1;
 		emulator->registers[0xF] = flag;
@@ -426,6 +432,10 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		break;
 	}
 	case CHIP8_SHL_VX: {
+#ifdef ORIGINAL_CHIP8_SHIFT
+		emulator->registers[instruction.rformat.rx] =
+			emulator->registers[instruction.rformat.ry];
+#endif /* ifdef ORIGINAL_CHIP8_SHIFT */
 		bool flag = (emulator->registers[instruction.rformat.rx] & 0x80) > 0;
 		emulator->registers[instruction.rformat.rx] <<= 1;
 		emulator->registers[0xF] = flag;
@@ -441,6 +451,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		emulator->vi = instruction.aformat.addr;
 		break;
 	case CHIP8_JMP_V0_ADDR:
+		// Original CHIP-8 behaviour
 		emulator->pc = instruction.aformat.addr + emulator->registers[0];
 		break;
 	case CHIP8_RND_VX_BYTE:
@@ -524,11 +535,13 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		break;
 	}
 	case CHIP8_LD_I_VX:
+		// Using modern (SUPER-CHIP/CHIP-48) behaviour - not modifying VI
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			emulator->memory[emulator->vi + i] = emulator->registers[i];
 		}
 		break;
 	case CHIP8_LD_VX_I:
+		// Using modern (SUPER-CHIP/CHIP-48) behaviour - not modifying VI
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			emulator->registers[i] = emulator->memory[emulator->vi + i];
 		}
