@@ -21,13 +21,11 @@
 
 #define FONT_BASE_ADDR 0x050
 
+#define NANOSECONDS_PER_SECOND 1000000000
 #define TARGET_HZ 60
-#define INSTRUCTIONS_PER_SEC 1000
-const clock_t EMULATOR_INTERVAL = CLOCKS_PER_SEC / TARGET_HZ;
-const clock_t INSTRUCTION_INTERVAL = CLOCKS_PER_SEC / INSTRUCTIONS_PER_SEC;
-clock_t g_last_inst_time;
-clock_t g_last_timer_time;
-clock_t g_current_time;
+#define CYCLES_PER_FRAME 100
+
+#define PIXEL_COLOUR 0xFF97F1CD
 
 #define TARGET_WIDTH 64
 #define TARGET_HEIGHT 32
@@ -82,6 +80,17 @@ SDL_Texture *g_texture = NULL;
 
 bool process_instruction(EmulatorState *, Chip8Instruction);
 void print_instruction_state(EmulatorState *, Chip8Instruction);
+void render(uint32_t *buffer);
+
+void handle_timers(EmulatorState *emulator) {
+	if (emulator->dt > 0) {
+		emulator->dt--;
+	}
+	if (emulator->st > 0) {
+		emulator->st--;
+		// TODO: Make a beep
+	}
+}
 
 Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 	static uint16_t prev_inst_addr = 0;
@@ -170,9 +179,6 @@ void reset_state(EmulatorState *emulator) {
 	emulator->st = 0;
 
 	g_debug = false;
-
-	g_last_timer_time = clock();
-	g_current_time = g_last_timer_time;
 }
 
 void init_graphics() {
@@ -250,10 +256,6 @@ void update_keyboard_state(EmulatorState *emulator, SDL_Scancode scancode, uint8
 		keypad_pressed = false;
 		break;
 	}
-
-	if (keypad_pressed) {
-		printf("Key %s: %s\n", state ? "down" : "up", SDL_GetScancodeName(scancode));
-	}
 }
 
 bool handle_input(EmulatorState *emulator) {
@@ -282,6 +284,7 @@ bool handle_input(EmulatorState *emulator) {
 					dump_registers(emulator);
 					dump_stack(emulator);
 					printf("\n");
+					render(emulator->display);
 				}
 				break;
 			default:
@@ -296,9 +299,9 @@ bool handle_input(EmulatorState *emulator) {
 	return true;
 }
 
-void render(uint32_t *pixels, int width) {
+void render(uint32_t *buffer) {
 	SDL_SetRenderTarget(g_renderer, g_texture);
-	SDL_UpdateTexture(g_texture, NULL, pixels, width * sizeof(uint32_t));
+	SDL_UpdateTexture(g_texture, NULL, buffer, TARGET_WIDTH * sizeof(uint32_t));
 
 	SDL_SetRenderTarget(g_renderer, NULL);
 	SDL_RenderClear(g_renderer);
@@ -339,7 +342,6 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 	switch (instruction_type(instruction)) {
 	case CHIP8_CLS:
 		memset(emulator->display, 0, sizeof(emulator->display));
-		render(emulator->display, TARGET_WIDTH);
 		break;
 	case CHIP8_RET:
 		emulator->pc = emulator->stack[--emulator->sp];
@@ -455,12 +457,11 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 				int x = (origin_x + col) % TARGET_WIDTH;
 				uint8_t state = byte & 0x80;
 				flag |= pixel(emulator, x, y) > 0 && state;
-				pixel(emulator, x, y) ^= state ? 0xFF97F1CD : 0;
+				pixel(emulator, x, y) ^= state ? PIXEL_COLOUR : 0;
 				byte <<= 1;
 			}
 		}
 		emulator->registers[0xF] = flag;
-		render(emulator->display, TARGET_WIDTH);
 		break;
 	}
 	case CHIP8_SKP_VX:
@@ -551,24 +552,20 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 
 	memcpy(emulator.memory + PROG_BASE, rom, rom_size);
 
+	struct timespec start, current;
+	long long frameTime = NANOSECONDS_PER_SECOND / TARGET_HZ;
+	long long elapsedTime;
+
 	if (debug) {
 		g_debug = true;
 		printf("Debugging enabled!\n");
 	}
-	while (handle_input(&emulator)) {
-		g_current_time = clock();
-		if (g_current_time < g_last_inst_time) {
-			// Handle overflow
-			g_last_inst_time = g_current_time;
-		}
-		if (g_current_time < g_last_timer_time) {
-			// Handle overflow
-			g_last_timer_time = g_current_time;
-		}
 
+	while (handle_input(&emulator)) {
 		if (!g_debug) {
-			if (g_current_time - g_last_inst_time >= INSTRUCTION_INTERVAL) {
-				g_last_inst_time = g_current_time;
+			clock_gettime(CLOCK_MONOTONIC, &start);
+
+			for (int cycle = 0; cycle < CYCLES_PER_FRAME; ++cycle) {
 				Chip8Instruction instruction = fetch_next(&emulator, false);
 				if (!process_instruction(&emulator, instruction)) {
 					dump_state(&emulator);
@@ -580,17 +577,15 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 				}
 			}
 
-			// TODO: How to handle timers when debugging?
-			if (g_current_time - g_last_timer_time >= EMULATOR_INTERVAL) {
-				g_last_timer_time = g_current_time;
-				if (emulator.dt > 0) {
-					emulator.dt--;
-				}
-				if (emulator.st > 0) {
-					emulator.st--;
-					// TODO: Make a beep
-				}
-			}
+			handle_timers(&emulator);
+			render(emulator.display);
+
+			do { // Lock to TARGET_HZ
+				clock_gettime(CLOCK_MONOTONIC, &current);
+				elapsedTime =
+					(current.tv_sec - start.tv_sec) * NANOSECONDS_PER_SECOND +
+					(current.tv_nsec - start.tv_nsec);
+			} while (elapsedTime < frameTime);
 		}
 	}
 
