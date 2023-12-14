@@ -19,7 +19,9 @@
 #include <string.h>
 #include <time.h>
 
-#define ORIGINAL_CHIP8_SHIFT
+#define CONFIG_CHIP8_SHIFT 0b1
+#define CONFIG_CHIP8_JMP0 0b10
+#define CONFIG_CHIP8_LD_I 0b100
 
 #define FONT_BASE_ADDR 0x050
 
@@ -69,6 +71,9 @@ typedef struct EmulatorState {
 
 	// Keyboard state, 1 = Pressed
 	uint8_t keyboard[16];
+
+	// CHIP-8 vs SUPER-CHIP/CHIP-48 differences
+	uint8_t configuration;
 } EmulatorState;
 
 bool g_debug = false;
@@ -413,10 +418,10 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		break;
 	}
 	case CHIP8_SHR_VX: {
-#ifdef ORIGINAL_CHIP8_SHIFT
-		emulator->registers[instruction.rformat.rx] =
-			emulator->registers[instruction.rformat.ry];
-#endif /* ifdef ORIGINAL_CHIP8_SHIFT */
+		if (emulator->configuration & CONFIG_CHIP8_SHIFT) {
+			emulator->registers[instruction.rformat.rx] =
+				emulator->registers[instruction.rformat.ry];
+		}
 		bool flag = emulator->registers[instruction.rformat.rx] & 1;
 		emulator->registers[instruction.rformat.rx] >>= 1;
 		emulator->registers[0xF] = flag;
@@ -432,10 +437,10 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		break;
 	}
 	case CHIP8_SHL_VX: {
-#ifdef ORIGINAL_CHIP8_SHIFT
-		emulator->registers[instruction.rformat.rx] =
-			emulator->registers[instruction.rformat.ry];
-#endif /* ifdef ORIGINAL_CHIP8_SHIFT */
+		if (emulator->configuration & CONFIG_CHIP8_SHIFT) {
+			emulator->registers[instruction.rformat.rx] =
+				emulator->registers[instruction.rformat.ry];
+		}
 		bool flag = (emulator->registers[instruction.rformat.rx] & 0x80) > 0;
 		emulator->registers[instruction.rformat.rx] <<= 1;
 		emulator->registers[0xF] = flag;
@@ -451,8 +456,12 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		emulator->vi = instruction.aformat.addr;
 		break;
 	case CHIP8_JMP_V0_ADDR:
-		// Original CHIP-8 behaviour
-		emulator->pc = instruction.aformat.addr + emulator->registers[0];
+		if (emulator->configuration & CONFIG_CHIP8_JMP0) {
+			emulator->pc = instruction.aformat.addr + emulator->registers[0];
+		} else {
+			emulator->pc = instruction.aformat.addr +
+				       emulator->registers[instruction.iformat.reg];
+		}
 		break;
 	case CHIP8_RND_VX_BYTE:
 		emulator->registers[instruction.iformat.reg] = (rand() % 256) &
@@ -535,15 +544,19 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		break;
 	}
 	case CHIP8_LD_I_VX:
-		// Using modern (SUPER-CHIP/CHIP-48) behaviour - not modifying VI
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			emulator->memory[emulator->vi + i] = emulator->registers[i];
 		}
+		if (emulator->configuration & CONFIG_CHIP8_LD_I) {
+			emulator->vi = instruction.iformat.reg + 1;
+		}
 		break;
 	case CHIP8_LD_VX_I:
-		// Using modern (SUPER-CHIP/CHIP-48) behaviour - not modifying VI
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			emulator->registers[i] = emulator->memory[emulator->vi + i];
+		}
+		if (emulator->configuration & CONFIG_CHIP8_LD_I) {
+			emulator->vi = instruction.iformat.reg + 1;
 		}
 		break;
 	case CHIP8_UNKNOWN:
@@ -559,6 +572,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	printf("Emulating!\n");
 
 	EmulatorState emulator = { 0 };
+	emulator.configuration = CONFIG_CHIP8_SHIFT | CONFIG_CHIP8_JMP0;
 
 	srand(time(NULL));
 	reset_state(&emulator);
