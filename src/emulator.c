@@ -23,12 +23,13 @@
 #define CONFIG_CHIP8_JMP0 0b10
 #define CONFIG_CHIP8_LD_I 0b100
 #define CONFIG_CHIP8_CLIPPING 0b1000
+#define CONFIG_CHIP8_DISP_WAIT 0b10000
 
 #define FONT_BASE_ADDR 0x050
 
 #define NANOSECONDS_PER_SECOND 1000000000
 #define TARGET_HZ 60
-#define CYCLES_PER_FRAME 100
+#define CYCLES_PER_FRAME 1000
 
 #define PIXEL_COLOUR 0xFF97F1CD
 
@@ -75,6 +76,8 @@ typedef struct EmulatorState {
 
 	// CHIP-8 vs SUPER-CHIP/CHIP-48 differences
 	uint8_t configuration;
+
+	bool display_interrupted;
 } EmulatorState;
 
 bool g_debug = false;
@@ -185,6 +188,8 @@ void reset_state(EmulatorState *emulator) {
 	emulator->pc = PROG_BASE;
 	emulator->dt = 0;
 	emulator->st = 0;
+
+	emulator->display_interrupted = false;
 
 	g_debug = false;
 }
@@ -472,6 +477,12 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 							       instruction.iformat.imm;
 		break;
 	case CHIP8_DRW_VX_VY_NIBBLE: {
+		if (emulator->configuration & CONFIG_CHIP8_DISP_WAIT &&
+		    !emulator->display_interrupted) {
+			emulator->display_interrupted = true;
+			emulator->pc -= 2;
+			break;
+		}
 		bool flag = false;
 		int origin_x = emulator->registers[instruction.rformat.rx] % TARGET_WIDTH;
 		int origin_y = emulator->registers[instruction.rformat.ry] % TARGET_HEIGHT;
@@ -496,7 +507,9 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 				byte <<= 1;
 			}
 		}
+
 		emulator->registers[0xF] = flag;
+		emulator->display_interrupted = false;
 		break;
 	}
 	case CHIP8_SKP_VX:
@@ -587,7 +600,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 
 	EmulatorState emulator = { 0 };
 	emulator.configuration = CONFIG_CHIP8_SHIFT | CONFIG_CHIP8_JMP0 | CONFIG_CHIP8_LD_I |
-				 CONFIG_CHIP8_CLIPPING;
+				 CONFIG_CHIP8_CLIPPING | CONFIG_CHIP8_DISP_WAIT;
 
 	srand(time(NULL));
 	reset_state(&emulator);
@@ -596,8 +609,8 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	memcpy(emulator.memory + PROG_BASE, rom, rom_size);
 
 	struct timespec start, current;
-	long long frameTime = NANOSECONDS_PER_SECOND / TARGET_HZ;
-	long long elapsedTime;
+	long long frame_time = NANOSECONDS_PER_SECOND / TARGET_HZ;
+	long long elapsed_time;
 
 	if (debug) {
 		g_debug = true;
@@ -618,6 +631,9 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 					print_asm(instruction);
 					printf("\n");
 				}
+				if (emulator.display_interrupted) {
+					break;
+				}
 			}
 
 			handle_timers(&emulator);
@@ -625,10 +641,10 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 
 			do { // Lock to TARGET_HZ
 				clock_gettime(CLOCK_MONOTONIC, &current);
-				elapsedTime =
+				elapsed_time =
 					(current.tv_sec - start.tv_sec) * NANOSECONDS_PER_SECOND +
 					(current.tv_nsec - start.tv_nsec);
-			} while (elapsedTime < frameTime);
+			} while (elapsed_time < frame_time);
 		}
 	}
 
