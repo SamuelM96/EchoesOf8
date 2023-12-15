@@ -19,22 +19,21 @@
 	CONFIG_CHIP8_SHIFT | CONFIG_CHIP8_JMP0 | CONFIG_CHIP8_LD_I | CONFIG_CHIP8_CLIPPING | \
 		CONFIG_CHIP8_DISP_WAIT
 
-#define FONT_BASE_ADDR 0x050
-
 #define NANOSECONDS_PER_SECOND 1000000000
 #define TARGET_HZ 60
-#define CYCLES_PER_FRAME 1000
+#define CYCLES_PER_FRAME 100
 
 #define PIXEL_COLOUR 0xFF97F1CD
+#define pixel(emulator, x, y) (emulator)->display[(y) * TARGET_WIDTH + (x)]
+#define FONT_BASE_ADDR 0x050
 
 #define TARGET_WIDTH 64
 #define TARGET_HEIGHT 32
 #define SCREEN_WIDTH 1280
 #define SCREEN_HEIGHT 640
-const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
-const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
 
-#define pixel(emulator, x, y) (emulator)->display[(y) * TARGET_WIDTH + (x)]
+extern const int SCALE_X;
+extern const int SCALE_Y;
 
 typedef struct EmulatorState {
 	// 0x000 - 0x1FF = Interpreter memory, not for programs
@@ -76,6 +75,8 @@ typedef struct EmulatorState {
 	bool display_interrupted;
 } EmulatorState;
 
+void emulate(uint8_t *rom, size_t rom_size, bool debug);
+
 void handle_timers(EmulatorState *);
 Chip8Instruction fetch_next(EmulatorState *, bool);
 void dump_registers(EmulatorState *);
@@ -90,7 +91,5 @@ void render(uint32_t *);
 void cleanup();
 void print_instruction_state(EmulatorState *, Chip8Instruction);
 bool process_instruction(EmulatorState *, Chip8Instruction);
-
-void emulate(uint8_t *rom, size_t rom_size, bool debug);
 
 #endif // !EMULATOR_H

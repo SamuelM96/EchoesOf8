@@ -20,6 +20,8 @@
 #include <time.h>
 
 bool g_debug = false;
+const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
+const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
 
 // SDL state
 SDL_Window *g_window = NULL;
