@@ -19,83 +19,12 @@
 #include <string.h>
 #include <time.h>
 
-#define CONFIG_CHIP8_SHIFT 0b1
-#define CONFIG_CHIP8_JMP0 0b10
-#define CONFIG_CHIP8_LD_I 0b100
-#define CONFIG_CHIP8_CLIPPING 0b1000
-#define CONFIG_CHIP8_DISP_WAIT 0b10000
-
-#define CONFIG_CHIP8                                                                         \
-	CONFIG_CHIP8_SHIFT | CONFIG_CHIP8_JMP0 | CONFIG_CHIP8_LD_I | CONFIG_CHIP8_CLIPPING | \
-		CONFIG_CHIP8_DISP_WAIT
-
-#define FONT_BASE_ADDR 0x050
-
-#define NANOSECONDS_PER_SECOND 1000000000
-#define TARGET_HZ 60
-#define CYCLES_PER_FRAME 1000
-
-#define PIXEL_COLOUR 0xFF97F1CD
-
-#define TARGET_WIDTH 64
-#define TARGET_HEIGHT 32
-#define SCREEN_WIDTH 1280
-#define SCREEN_HEIGHT 640
-const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
-const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
-
-typedef struct EmulatorState {
-	// 0x000 - 0x1FF = Interpreter memory, not for programs
-	// Programs start at 0x200 (512)
-	// Some start at 0x600 (1536) (ETI 660 computer)
-	uint8_t memory[4096];
-
-	// Stores return addresses
-	// Allows for 16 levels of nested subroutines
-	uint16_t stack[16];
-
-	// 0-F general purpose registers
-	uint8_t registers[16];
-
-	// Stack pointer
-	uint8_t sp;
-
-	// For memory addresses, lower 12bits used
-	uint16_t vi;
-
-	// Program counter
-	uint16_t pc;
-
-	// Delay timer
-	uint8_t dt;
-
-	// Sound timer
-	uint8_t st;
-
-	// Display pixels
-	uint32_t display[TARGET_WIDTH * TARGET_HEIGHT];
-
-	// Keyboard state, 1 = Pressed
-	uint8_t keyboard[16];
-
-	// CHIP-8 vs SUPER-CHIP/CHIP-48 differences
-	uint8_t configuration;
-
-	bool display_interrupted;
-} EmulatorState;
-
 bool g_debug = false;
 
 // SDL state
 SDL_Window *g_window = NULL;
 SDL_Renderer *g_renderer = NULL;
 SDL_Texture *g_texture = NULL;
-
-#define pixel(emulator, x, y) (emulator)->display[(y) * TARGET_WIDTH + (x)]
-
-bool process_instruction(EmulatorState *, Chip8Instruction);
-void print_instruction_state(EmulatorState *, Chip8Instruction);
-void render(uint32_t *buffer);
 
 void handle_timers(EmulatorState *emulator) {
 	if (emulator->dt > 0) {
