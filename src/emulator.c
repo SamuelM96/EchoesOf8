@@ -25,6 +25,10 @@
 #define CONFIG_CHIP8_CLIPPING 0b1000
 #define CONFIG_CHIP8_DISP_WAIT 0b10000
 
+#define CONFIG_CHIP8                                                                         \
+	CONFIG_CHIP8_SHIFT | CONFIG_CHIP8_JMP0 | CONFIG_CHIP8_LD_I | CONFIG_CHIP8_CLIPPING | \
+		CONFIG_CHIP8_DISP_WAIT
+
 #define FONT_BASE_ADDR 0x050
 
 #define NANOSECONDS_PER_SECOND 1000000000
@@ -599,8 +603,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	printf("Emulating!\n");
 
 	EmulatorState emulator = { 0 };
-	emulator.configuration = CONFIG_CHIP8_SHIFT | CONFIG_CHIP8_JMP0 | CONFIG_CHIP8_LD_I |
-				 CONFIG_CHIP8_CLIPPING | CONFIG_CHIP8_DISP_WAIT;
+	emulator.configuration = CONFIG_CHIP8;
 
 	srand(time(NULL));
 	reset_state(&emulator);
