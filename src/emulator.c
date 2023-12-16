@@ -2,6 +2,7 @@
 #include "common.h"
 #include "disassembler.h"
 #include "instructions.h"
+#include <SDL_rect.h>
 
 #define NK_INCLUDE_FIXED_TYPES
 #define NK_INCLUDE_STANDARD_IO
@@ -322,11 +323,17 @@ bool handle_input(EmulatorState *emulator) {
 }
 
 void render(EmulatorState *emulator) {
+	SDL_SetRenderDrawColor(g_renderer, 0x60, 0x65, 0x6A, 0xFF);
+	SDL_RenderClear(g_renderer);
+
 	if (g_show_debug_ui) {
+		const int window_flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE |
+					 NK_WINDOW_NO_SCROLLBAR;
+		SDL_SetWindowSize(g_window, SCREEN_WIDTH, 800);
+
 		struct nk_color active_colour = { 230, 150, 150, 255 };
-		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 250),
-			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
-				     NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE)) {
+		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 210),
+			     window_flags)) {
 			nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
 			nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
 			nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFTING;
@@ -361,13 +368,28 @@ void render(EmulatorState *emulator) {
 				    sizeof(CYCLES_PER_FRAME) / sizeof(int), &selected_cpf, 20,
 				    nk_vec2(100, 225));
 			emulator->cycles_per_frame = selected_cpf;
-
-			nk_end(g_nk_ctx);
 		}
+		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Registers", nk_rect(250, 0, 400, 250),
-			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE |
-				     NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR)) {
+		if (nk_begin(g_nk_ctx, "Stack", nk_rect(0, 210, 250, 350), window_flags)) {
+			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+			for (int i = 0; i < sizeof(emulator->stack); ++i) {
+				struct nk_color colour = g_nk_ctx->style.text.color;
+				if (emulator->sp == i) {
+					g_nk_ctx->style.text.color = active_colour;
+				}
+				nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "[%X] 0x%02hx", i,
+					  emulator->stack[i]);
+				g_nk_ctx->style.text.color = colour;
+			}
+		}
+		nk_end(g_nk_ctx);
+
+		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 890, 240), window_flags)) {
+		}
+		nk_end(g_nk_ctx);
+
+		if (nk_begin(g_nk_ctx, "Registers", nk_rect(250, 0, 650, 239), window_flags)) {
 			nk_layout_row_dynamic(g_nk_ctx, 30, 4);
 			for (int i = 0; i < sizeof(emulator->registers); ++i) {
 				nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "V%X = 0x%02hx", i,
@@ -383,21 +405,11 @@ void render(EmulatorState *emulator) {
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Stack", nk_rect(650, 0, 250, 310),
-			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE |
-				     NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR)) {
-			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
-			for (int i = 0; i < sizeof(emulator->stack); ++i) {
-				struct nk_color colour = g_nk_ctx->style.text.color;
-				if (emulator->sp == i) {
-					g_nk_ctx->style.text.color = active_colour;
-				}
-				nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "[%X] 0x%02hx", i,
-					  emulator->stack[i]);
-				g_nk_ctx->style.text.color = colour;
-			}
+		if (nk_begin(g_nk_ctx, "Disassembly", nk_rect(890, 0, 390, 800), window_flags)) {
 		}
 		nk_end(g_nk_ctx);
+	} else {
+		SDL_SetWindowSize(g_window, SCREEN_WIDTH, SCREEN_HEIGHT);
 	}
 
 	SDL_SetRenderTarget(g_renderer, g_texture);
@@ -405,7 +417,19 @@ void render(EmulatorState *emulator) {
 
 	SDL_SetRenderTarget(g_renderer, NULL);
 	SDL_RenderClear(g_renderer);
-	SDL_RenderCopy(g_renderer, g_texture, NULL, NULL);
+	if (g_show_debug_ui) {
+		int window_w, window_h;
+		SDL_GetWindowSize(g_window, &window_w, &window_h);
+		const int emu_scale = 10;
+		const int emu_width = TARGET_WIDTH * emu_scale;
+		const int emu_height = TARGET_HEIGHT * emu_scale;
+		const int emu_x = window_w / 2 - (emu_width / 2) - 70;
+		const int emu_y = window_h / 2 - (emu_height / 2);
+		SDL_Rect display_rect = { emu_x, emu_y, emu_width, emu_height };
+		SDL_RenderCopy(g_renderer, g_texture, NULL, &display_rect);
+	} else {
+		SDL_RenderCopy(g_renderer, g_texture, NULL, NULL);
+	}
 
 	nk_sdl_render(NK_ANTI_ALIASING_ON);
 
@@ -765,6 +789,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 
 	EmulatorState emulator = { 0 };
 	emulator.configuration = CONFIG_CHIP8;
+	emulator.configuration ^= CONFIG_CHIP8_DISP_WAIT;
 	emulator.cycles_per_frame = DEFAULT_CYCLES_PER_FRAME;
 
 	srand(time(NULL));
