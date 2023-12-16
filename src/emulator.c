@@ -3,6 +3,18 @@
 #include "disassembler.h"
 #include "instructions.h"
 
+#define NK_INCLUDE_FIXED_TYPES
+#define NK_INCLUDE_STANDARD_IO
+#define NK_INCLUDE_STANDARD_VARARGS
+#define NK_INCLUDE_DEFAULT_ALLOCATOR
+#define NK_INCLUDE_VERTEX_BUFFER_OUTPUT
+#define NK_INCLUDE_FONT_BAKING
+#define NK_INCLUDE_DEFAULT_FONT
+#define NK_IMPLEMENTATION
+#define NK_SDL_RENDERER_IMPLEMENTATION
+#include "nuklear.h"
+#include "nuklear_sdl_renderer.h"
+
 #include <SDL.h>
 #include <SDL_audio.h>
 #include <SDL_error.h>
@@ -27,10 +39,11 @@ bool g_debug = false;
 const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
 const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
 
-// SDL state
+// SDL & Nuklear state
 SDL_Window *g_window = NULL;
 SDL_Renderer *g_renderer = NULL;
 SDL_Texture *g_texture = NULL;
+struct nk_context *g_nk_ctx;
 
 // Beeper state
 SDL_AudioSpec g_beeper_spec;
@@ -257,6 +270,7 @@ void update_keyboard_state(EmulatorState *emulator, SDL_Scancode scancode, uint8
 
 bool handle_input(EmulatorState *emulator) {
 	SDL_Event e;
+	nk_input_begin(g_nk_ctx);
 	while (SDL_PollEvent(&e)) {
 		switch (e.type) {
 		case SDL_QUIT:
@@ -281,7 +295,6 @@ bool handle_input(EmulatorState *emulator) {
 					dump_registers(emulator);
 					dump_stack(emulator);
 					printf("\n");
-					render(emulator->display);
 				}
 				break;
 			default:
@@ -291,22 +304,62 @@ bool handle_input(EmulatorState *emulator) {
 			break;
 		}
 		}
+		nk_sdl_handle_event(&e);
 	}
+	nk_input_end(g_nk_ctx);
 
 	return true;
 }
 
-void render(uint32_t *buffer) {
+void render(EmulatorState *emulator) {
+	if (g_debug) {
+		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(50, 50, 250, 150),
+			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
+				     NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE)) {
+			nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
+			nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
+			nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFT;
+			nk_bool clipping = emulator->configuration & CONFIG_CHIP8_CLIPPING;
+			nk_bool jumping = emulator->configuration & CONFIG_CHIP8_JUMPING;
+			nk_bool memory = emulator->configuration & CONFIG_CHIP8_MEMORY;
+
+			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+			if (nk_checkbox_label(g_nk_ctx, "VF Reset", &vf_reset)) {
+				emulator->configuration ^= CONFIG_CHIP8_VF_RESET;
+			}
+			if (nk_checkbox_label(g_nk_ctx, "Display Wait", &disp_wait)) {
+				emulator->configuration ^= CONFIG_CHIP8_DISP_WAIT;
+			}
+			if (nk_checkbox_label(g_nk_ctx, "Clipping", &clipping)) {
+				emulator->configuration ^= CONFIG_CHIP8_CLIPPING;
+			}
+			if (nk_checkbox_label(g_nk_ctx, "Shifting", &shifting)) {
+				emulator->configuration ^= CONFIG_CHIP8_SHIFT;
+			}
+			if (nk_checkbox_label(g_nk_ctx, "Jumping", &jumping)) {
+				emulator->configuration ^= CONFIG_CHIP8_JUMPING;
+			}
+			if (nk_checkbox_label(g_nk_ctx, "Memory", &memory)) {
+				emulator->configuration ^= CONFIG_CHIP8_MEMORY;
+			}
+		}
+		nk_end(g_nk_ctx);
+	}
+
 	SDL_SetRenderTarget(g_renderer, g_texture);
-	SDL_UpdateTexture(g_texture, NULL, buffer, TARGET_WIDTH * sizeof(uint32_t));
+	SDL_UpdateTexture(g_texture, NULL, emulator->display, TARGET_WIDTH * sizeof(uint32_t));
 
 	SDL_SetRenderTarget(g_renderer, NULL);
 	SDL_RenderClear(g_renderer);
 	SDL_RenderCopy(g_renderer, g_texture, NULL, NULL);
+
+	nk_sdl_render(NK_ANTI_ALIASING_ON);
+
 	SDL_RenderPresent(g_renderer);
 }
 
 void cleanup() {
+	nk_sdl_shutdown();
 	SDL_DestroyTexture(g_texture);
 	SDL_DestroyRenderer(g_renderer);
 	SDL_DestroyWindow(g_window);
@@ -450,7 +503,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		emulator->vi = instruction.aformat.addr;
 		break;
 	case CHIP8_JMP_V0_ADDR:
-		if (emulator->configuration & CONFIG_CHIP8_JMP0) {
+		if (emulator->configuration & CONFIG_CHIP8_JUMPING) {
 			emulator->pc = instruction.aformat.addr + emulator->registers[0];
 		} else {
 			emulator->pc = instruction.aformat.addr +
@@ -559,7 +612,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			emulator->memory[emulator->vi + i] = emulator->registers[i];
 		}
-		if (emulator->configuration & CONFIG_CHIP8_LD_I) {
+		if (emulator->configuration & CONFIG_CHIP8_MEMORY) {
 			emulator->vi = instruction.iformat.reg + 1;
 		}
 		break;
@@ -567,7 +620,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			emulator->registers[i] = emulator->memory[emulator->vi + i];
 		}
-		if (emulator->configuration & CONFIG_CHIP8_LD_I) {
+		if (emulator->configuration & CONFIG_CHIP8_MEMORY) {
 			emulator->vi = instruction.iformat.reg + 1;
 		}
 		break;
@@ -580,7 +633,8 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 	return true;
 }
 
-void init_sdl() {
+void init_graphics() {
+	SDL_SetHint(SDL_HINT_VIDEO_HIGHDPI_DISABLED, "0");
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
 		fprintf(stderr, "[!] SDL could not initialise! SDL error: %s\n", SDL_GetError());
 	} else {
@@ -591,11 +645,42 @@ void init_sdl() {
 			fprintf(stderr, "[!] Window could not be created! SDL error: %s\n",
 				SDL_GetError());
 		} else {
-			g_renderer = SDL_CreateRenderer(g_window, -1, SDL_TEXTUREACCESS_TARGET);
+			int flags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC;
+			float font_scale = 1;
+
+			g_renderer =
+				SDL_CreateRenderer(g_window, -1, SDL_TEXTUREACCESS_TARGET | flags);
+
+			// Scale for High-DPI displays
+			{
+				int render_w, render_h;
+				int window_w, window_h;
+				float scale_x, scale_y;
+				SDL_GetRendererOutputSize(g_renderer, &render_w, &render_h);
+				SDL_GetWindowSize(g_window, &window_w, &window_h);
+				scale_x = (float)(render_w) / (float)(window_w);
+				scale_y = (float)(render_h) / (float)(window_h);
+				SDL_RenderSetScale(g_renderer, scale_x, scale_y);
+				font_scale = scale_y;
+			}
 
 			g_texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
 						      SDL_TEXTUREACCESS_TARGET, TARGET_WIDTH,
 						      TARGET_HEIGHT);
+
+			g_nk_ctx = nk_sdl_init(g_window, g_renderer);
+			{
+				struct nk_font_atlas *atlas;
+				struct nk_font_config config = nk_font_config(0);
+				struct nk_font *font;
+
+				nk_sdl_font_stash_begin(&atlas);
+				font = nk_font_atlas_add_default(atlas, 13 * font_scale, &config);
+				nk_sdl_font_stash_end();
+
+				font->handle.height /= font_scale;
+				nk_style_set_font(g_nk_ctx, &font->handle);
+			}
 		}
 
 		SDL_AudioSpec spec = { 0 };
@@ -622,7 +707,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 
 	srand(time(NULL));
 	reset_state(&emulator);
-	init_sdl();
+	init_graphics();
 
 	memcpy(emulator.memory + PROG_BASE, rom, rom_size);
 
@@ -636,9 +721,8 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	}
 
 	while (handle_input(&emulator)) {
+		clock_gettime(CLOCK_MONOTONIC, &start);
 		if (!g_debug) {
-			clock_gettime(CLOCK_MONOTONIC, &start);
-
 			for (int cycle = 0; cycle < CYCLES_PER_FRAME; ++cycle) {
 				Chip8Instruction instruction = fetch_next(&emulator, false);
 				if (!process_instruction(&emulator, instruction)) {
@@ -655,15 +739,15 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 			}
 
 			handle_timers(&emulator);
-			render(emulator.display);
-
-			do { // Lock to TARGET_HZ
-				clock_gettime(CLOCK_MONOTONIC, &current);
-				elapsed_time =
-					(current.tv_sec - start.tv_sec) * NANOSECONDS_PER_SECOND +
-					(current.tv_nsec - start.tv_nsec);
-			} while (elapsed_time < frame_time);
 		}
+
+		render(&emulator);
+
+		do { // Lock to TARGET_HZ
+			clock_gettime(CLOCK_MONOTONIC, &current);
+			elapsed_time = (current.tv_sec - start.tv_sec) * NANOSECONDS_PER_SECOND +
+				       (current.tv_nsec - start.tv_nsec);
+		} while (elapsed_time < frame_time);
 	}
 
 	cleanup();

@@ -9,14 +9,15 @@
 
 #include <SDL_scancode.h>
 
-#define CONFIG_CHIP8_SHIFT 0b1
-#define CONFIG_CHIP8_JMP0 0b10
-#define CONFIG_CHIP8_LD_I 0b100
+#define CONFIG_CHIP8_VF_RESET 0b1
+#define CONFIG_CHIP8_MEMORY 0b10
+#define CONFIG_CHIP8_DISP_WAIT 0b100
 #define CONFIG_CHIP8_CLIPPING 0b1000
-#define CONFIG_CHIP8_DISP_WAIT 0b10000
+#define CONFIG_CHIP8_SHIFT 0b10000
+#define CONFIG_CHIP8_JUMPING 0b100000
 
-#define CONFIG_CHIP8                                                                         \
-	CONFIG_CHIP8_SHIFT | CONFIG_CHIP8_JMP0 | CONFIG_CHIP8_LD_I | CONFIG_CHIP8_CLIPPING | \
+#define CONFIG_CHIP8                                                                              \
+	CONFIG_CHIP8_SHIFT | CONFIG_CHIP8_JUMPING | CONFIG_CHIP8_MEMORY | CONFIG_CHIP8_CLIPPING | \
 		CONFIG_CHIP8_DISP_WAIT
 
 #define NANOSECONDS_PER_SECOND 1000000000
@@ -87,10 +88,10 @@ void dump_stack(EmulatorState *);
 static inline void dump_memory(EmulatorState *);
 void dump_state(EmulatorState *);
 void reset_state(EmulatorState *);
-void init_sdl();
+void init_graphics();
 void update_keyboard_state(EmulatorState *, SDL_Scancode, uint8_t);
 bool handle_input(EmulatorState *);
-void render(uint32_t *);
+void render(EmulatorState *);
 void cleanup();
 void print_instruction_state(EmulatorState *, Chip8Instruction);
 bool process_instruction(EmulatorState *, Chip8Instruction);
