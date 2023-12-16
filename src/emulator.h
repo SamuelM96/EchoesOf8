@@ -93,6 +93,6 @@ bool handle_input(EmulatorState *);
 void render(EmulatorState *);
 void cleanup();
 void print_instruction_state(EmulatorState *, Chip8Instruction);
-bool process_instruction(EmulatorState *, Chip8Instruction);
+bool execute(EmulatorState *, Chip8Instruction);
 
 #endif // !EMULATOR_H

@@ -286,7 +286,7 @@ bool handle_input(EmulatorState *emulator) {
 				break;
 			case SDL_SCANCODE_N:
 				if (g_debug) {
-					process_instruction(emulator, fetch_next(emulator, true));
+					execute(emulator, fetch_next(emulator, true));
 					dump_registers(emulator);
 					dump_stack(emulator);
 					printf("\n");
@@ -379,7 +379,7 @@ void print_instruction_state(EmulatorState *emulator, Chip8Instruction instructi
 	}
 }
 
-bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) {
+bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 	if (emulator->pc < 0 || emulator->pc > sizeof(emulator->memory)) {
 		fprintf(stderr, "[!] PC exceeds memory boundaries\n");
 		return false;
@@ -646,11 +646,12 @@ void init_graphics() {
 			fprintf(stderr, "[!] Window could not be created! SDL error: %s\n",
 				SDL_GetError());
 		} else {
-			int flags = SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC;
 			float font_scale = 1;
 
-			g_renderer =
-				SDL_CreateRenderer(g_window, -1, SDL_TEXTUREACCESS_TARGET | flags);
+			g_renderer = SDL_CreateRenderer(g_window, -1,
+							SDL_RENDERER_ACCELERATED |
+								SDL_RENDERER_PRESENTVSYNC |
+								SDL_TEXTUREACCESS_TARGET);
 
 			// Scale for High-DPI displays
 			{
@@ -726,7 +727,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 		if (!g_debug) {
 			for (int cycle = 0; cycle < CYCLES_PER_FRAME; ++cycle) {
 				Chip8Instruction instruction = fetch_next(&emulator, false);
-				if (!process_instruction(&emulator, instruction)) {
+				if (!execute(&emulator, instruction)) {
 					dump_state(&emulator);
 					g_debug = true;
 					printf("\n[!] Something went wrong @ 0x%03hx: ",
