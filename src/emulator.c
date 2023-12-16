@@ -307,39 +307,57 @@ bool handle_input(EmulatorState *emulator) {
 }
 
 void render(EmulatorState *emulator) {
-	if (g_debug) {
-		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(50, 50, 250, 150),
-			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
-				     NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE)) {
-			nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
-			nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
-			nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFTING;
-			nk_bool clipping = emulator->configuration & CONFIG_CHIP8_CLIPPING;
-			nk_bool jumping = emulator->configuration & CONFIG_CHIP8_JUMPING;
-			nk_bool memory = emulator->configuration & CONFIG_CHIP8_MEMORY;
+	// if (g_debug) {
+	if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 150),
+		     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
+			     NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE)) {
+		nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
+		nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
+		nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFTING;
+		nk_bool clipping = emulator->configuration & CONFIG_CHIP8_CLIPPING;
+		nk_bool jumping = emulator->configuration & CONFIG_CHIP8_JUMPING;
+		nk_bool memory = emulator->configuration & CONFIG_CHIP8_MEMORY;
 
-			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
-			if (nk_checkbox_label(g_nk_ctx, "VF Reset", &vf_reset)) {
-				emulator->configuration ^= CONFIG_CHIP8_VF_RESET;
-			}
-			if (nk_checkbox_label(g_nk_ctx, "Display Wait", &disp_wait)) {
-				emulator->configuration ^= CONFIG_CHIP8_DISP_WAIT;
-			}
-			if (nk_checkbox_label(g_nk_ctx, "Clipping", &clipping)) {
-				emulator->configuration ^= CONFIG_CHIP8_CLIPPING;
-			}
-			if (nk_checkbox_label(g_nk_ctx, "Shifting", &shifting)) {
-				emulator->configuration ^= CONFIG_CHIP8_SHIFTING;
-			}
-			if (nk_checkbox_label(g_nk_ctx, "Jumping", &jumping)) {
-				emulator->configuration ^= CONFIG_CHIP8_JUMPING;
-			}
-			if (nk_checkbox_label(g_nk_ctx, "Memory", &memory)) {
-				emulator->configuration ^= CONFIG_CHIP8_MEMORY;
-			}
+		nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+		if (nk_checkbox_label(g_nk_ctx, "VF Reset", &vf_reset)) {
+			emulator->configuration ^= CONFIG_CHIP8_VF_RESET;
 		}
-		nk_end(g_nk_ctx);
+		if (nk_checkbox_label(g_nk_ctx, "Display Wait", &disp_wait)) {
+			emulator->configuration ^= CONFIG_CHIP8_DISP_WAIT;
+		}
+		if (nk_checkbox_label(g_nk_ctx, "Clipping", &clipping)) {
+			emulator->configuration ^= CONFIG_CHIP8_CLIPPING;
+		}
+		if (nk_checkbox_label(g_nk_ctx, "Shifting", &shifting)) {
+			emulator->configuration ^= CONFIG_CHIP8_SHIFTING;
+		}
+		if (nk_checkbox_label(g_nk_ctx, "Jumping", &jumping)) {
+			emulator->configuration ^= CONFIG_CHIP8_JUMPING;
+		}
+		if (nk_checkbox_label(g_nk_ctx, "Memory", &memory)) {
+			emulator->configuration ^= CONFIG_CHIP8_MEMORY;
+		}
 	}
+	nk_end(g_nk_ctx);
+
+	if (nk_begin(g_nk_ctx, "Registers", nk_rect(250, 0, 400, 230),
+		     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE |
+			     NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR)) {
+		nk_layout_row_dynamic(g_nk_ctx, 30, 4);
+		for (int i = 0; i < sizeof(emulator->registers); ++i) {
+			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "V%X = 0x%02hx", i,
+				  emulator->registers[i]);
+		}
+		nk_layout_row_dynamic(g_nk_ctx, 30, 4);
+		nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "PC = 0x%04hx", emulator->pc);
+		nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "VI = 0x%04hx", emulator->vi);
+		nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "SP = 0x%02hx", emulator->sp);
+		nk_layout_row_dynamic(g_nk_ctx, 30, 4);
+		nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "ST = 0x%02hx", emulator->st);
+		nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "DT = 0x%02hx", emulator->dt);
+	}
+	nk_end(g_nk_ctx);
+	// }
 
 	SDL_SetRenderTarget(g_renderer, g_texture);
 	SDL_UpdateTexture(g_texture, NULL, emulator->display, TARGET_WIDTH * sizeof(uint32_t));
