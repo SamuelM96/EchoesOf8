@@ -335,6 +335,8 @@ void render(EmulatorState *emulator) {
 	SDL_SetRenderDrawColor(g_renderer, 0x60, 0x65, 0x6A, 0xFF);
 	SDL_RenderClear(g_renderer);
 
+	// TODO: Reset button
+	// TODO: Audio controls
 	// TODO: Load ROMs at runtime
 	// TODO: Clean up handling of coordiantes and sizes
 	// TODO: Handle window resizing whilst maintaining aspect ratio of emulator display
@@ -346,6 +348,7 @@ void render(EmulatorState *emulator) {
 	// TODO: Debugging buttons
 	// TODO: Call graph
 	// TODO: Decompiler output
+	// TODO: Audio waveform
 	if (g_show_debug_ui) {
 		const int window_flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE |
 					 NK_WINDOW_NO_SCROLLBAR;
@@ -407,6 +410,8 @@ void render(EmulatorState *emulator) {
 
 		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 890, 240), window_flags)) {
 			// TODO: Show live memory dump
+			// TODO: Jump to PC button
+			// TODO: Jump to address from text field
 		}
 		nk_end(g_nk_ctx);
 
@@ -428,6 +433,7 @@ void render(EmulatorState *emulator) {
 
 		if (nk_begin(g_nk_ctx, "Disassembly", nk_rect(890, 0, 390, 800), window_flags)) {
 			// TODO: Show live disassembly of the instructions being executed
+			// TODO: Highlight PC line
 		}
 		nk_end(g_nk_ctx);
 	} else {
@@ -731,6 +737,7 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 		}
 		break;
 	case CHIP8_UNKNOWN:
+		// TODO: Handle CHIP-48 instructions
 		fprintf(stderr, "[!] Unknown instruction received: 0x%04hx @ 0x%03hx\n",
 			instruction.raw, emulator->pc);
 		return false;
