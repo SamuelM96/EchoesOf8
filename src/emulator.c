@@ -318,7 +318,7 @@ void render(EmulatorState *emulator) {
 				     NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE)) {
 			nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
 			nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
-			nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFT;
+			nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFTING;
 			nk_bool clipping = emulator->configuration & CONFIG_CHIP8_CLIPPING;
 			nk_bool jumping = emulator->configuration & CONFIG_CHIP8_JUMPING;
 			nk_bool memory = emulator->configuration & CONFIG_CHIP8_MEMORY;
@@ -334,7 +334,7 @@ void render(EmulatorState *emulator) {
 				emulator->configuration ^= CONFIG_CHIP8_CLIPPING;
 			}
 			if (nk_checkbox_label(g_nk_ctx, "Shifting", &shifting)) {
-				emulator->configuration ^= CONFIG_CHIP8_SHIFT;
+				emulator->configuration ^= CONFIG_CHIP8_SHIFTING;
 			}
 			if (nk_checkbox_label(g_nk_ctx, "Jumping", &jumping)) {
 				emulator->configuration ^= CONFIG_CHIP8_JUMPING;
@@ -437,17 +437,23 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 	case CHIP8_OR_VX_VY:
 		emulator->registers[instruction.rformat.rx] |=
 			emulator->registers[instruction.rformat.ry];
-		emulator->registers[0xF] = 0;
+		if (emulator->configuration & CONFIG_CHIP8_VF_RESET) {
+			emulator->registers[0xF] = 0;
+		}
 		break;
 	case CHIP8_AND_VX_VY:
 		emulator->registers[instruction.rformat.rx] &=
 			emulator->registers[instruction.rformat.ry];
-		emulator->registers[0xF] = 0;
+		if (emulator->configuration & CONFIG_CHIP8_VF_RESET) {
+			emulator->registers[0xF] = 0;
+		}
 		break;
 	case CHIP8_XOR_VX_VY:
 		emulator->registers[instruction.rformat.rx] ^=
 			emulator->registers[instruction.rformat.ry];
-		emulator->registers[0xF] = 0;
+		if (emulator->configuration & CONFIG_CHIP8_VF_RESET) {
+			emulator->registers[0xF] = 0;
+		}
 		break;
 	case CHIP8_ADD_VX_VY: {
 		uint16_t result = emulator->registers[instruction.rformat.rx] +
@@ -465,7 +471,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		break;
 	}
 	case CHIP8_SHR_VX: {
-		if (emulator->configuration & CONFIG_CHIP8_SHIFT) {
+		if (emulator->configuration & CONFIG_CHIP8_SHIFTING) {
 			emulator->registers[instruction.rformat.rx] =
 				emulator->registers[instruction.rformat.ry];
 		}
@@ -484,7 +490,7 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 		break;
 	}
 	case CHIP8_SHL_VX: {
-		if (emulator->configuration & CONFIG_CHIP8_SHIFT) {
+		if (emulator->configuration & CONFIG_CHIP8_SHIFTING) {
 			emulator->registers[instruction.rformat.rx] =
 				emulator->registers[instruction.rformat.ry];
 		}
