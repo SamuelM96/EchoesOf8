@@ -45,7 +45,8 @@ void print_usage() {
 	printf("                                      - recursive    Recursive descent\n");
 	printf("    assessmble <asm> <rom>        Assessmbles the given assembly code into a CHIP-8 ROM\n");
 	printf("    compile <source> <rom>        Compiles the given source code into a CHIP-8 ROM\n");
-	printf("    emulate <rom>                 Emulates the ROM\n");
+	printf("    emulate <rom> [--debug]       Emulates the ROM\n");
+	printf("                                    --debug    Enables debug mode\n");
 }
 
 int main(int argc, char *argv[]) {
@@ -100,12 +101,24 @@ int main(int argc, char *argv[]) {
 		printf("!!! NOT IMPLEMENTED !!!\n");
 		return EXIT_FAILURE;
 	} else if (strcmp(argv[1], "emulate") == 0) {
-		if (argc != 3) {
+		if (argc != 3 && argc != 4) {
 			print_usage();
 			return EXIT_FAILURE;
 		}
-		buffer = read_rom(argv[2], &buffer_size);
-		emulate(buffer, buffer_size, true);
+
+		int rom_idx = 2;
+		bool debug = false;
+		if (argc == 4) {
+			if (strcmp("--debug", argv[2]) == 0) {
+				debug = true;
+				rom_idx = 3;
+			} else if (strcmp("--debug", argv[3]) == 0) {
+				debug = true;
+			}
+		}
+
+		buffer = read_rom(argv[rom_idx], &buffer_size);
+		emulate(buffer, buffer_size, debug);
 	} else {
 		print_usage();
 		return EXIT_FAILURE;

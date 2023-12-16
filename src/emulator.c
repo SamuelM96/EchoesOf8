@@ -632,7 +632,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 
 	if (debug) {
 		g_debug = true;
-		printf("Debugging enabled!\n");
+		printf("Debugging enabled! Press <SPACE> pause/unpause.\n");
 	}
 
 	while (handle_input(&emulator)) {
