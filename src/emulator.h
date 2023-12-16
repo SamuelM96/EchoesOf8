@@ -66,14 +66,13 @@ typedef struct EmulatorState {
 
 	// Display pixels
 	uint32_t display[TARGET_WIDTH * TARGET_HEIGHT];
+	bool display_interrupted;
 
 	// Keyboard state, 1 = Pressed
 	uint8_t keyboard[16];
 
 	// CHIP-8 vs SUPER-CHIP/CHIP-48 differences
 	uint8_t configuration;
-
-	bool display_interrupted;
 } EmulatorState;
 
 void emulate(uint8_t *rom, size_t rom_size, bool debug);

@@ -173,11 +173,11 @@ void dump_state(EmulatorState *emulator) {
 }
 
 void reset_state(EmulatorState *emulator) {
-	memset(emulator->memory, 0, sizeof(emulator->memory));
-	memset(emulator->stack, 0, sizeof(emulator->stack));
-	memset(emulator->registers, 0, sizeof(emulator->registers));
-	memset(emulator->display, 0, sizeof(emulator->display));
-	memset(emulator->keyboard, 0, sizeof(emulator->keyboard));
+	size_t config = emulator->configuration;
+
+	memset(emulator, 0, sizeof(*emulator));
+
+	emulator->configuration = config;
 
 	const uint8_t emulator_fonts[80] = {
 		// https://tobiasvl.github.io/blog/write-a-chip-8-emulator/#fx29-font-character
@@ -198,15 +198,10 @@ void reset_state(EmulatorState *emulator) {
 		0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
 		0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 	};
+
 	memcpy(emulator->memory + FONT_BASE_ADDR, emulator_fonts, sizeof(emulator_fonts));
 
-	emulator->sp = 0;
-	emulator->vi = 0;
 	emulator->pc = PROG_BASE;
-	emulator->dt = 0;
-	emulator->st = 0;
-
-	emulator->display_interrupted = false;
 
 	g_debug = false;
 }
