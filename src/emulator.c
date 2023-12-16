@@ -40,6 +40,16 @@ bool g_show_debug_ui = false;
 const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
 const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
 
+const int CYCLES_PER_FRAME[] = {
+	[CPF_7] = 7,	 [CPF_15] = 15,	  [CPF_20] = 20,   [CPF_30] = 30,
+	[CPF_100] = 100, [CPF_200] = 200, [CPF_500] = 500, [CPF_1000] = 1000,
+};
+const char *CYCLES_PER_FRAME_STR[] = {
+	[CPF_7] = "7",	   [CPF_10] = "10",   [CPF_15] = "15",
+	[CPF_20] = "20",   [CPF_30] = "30",   [CPF_100] = "100",
+	[CPF_200] = "200", [CPF_500] = "500", [CPF_1000] = "1000",
+};
+
 // SDL & Nuklear state
 SDL_Window *g_window = NULL;
 SDL_Renderer *g_renderer = NULL;
@@ -175,10 +185,13 @@ void dump_state(EmulatorState *emulator) {
 
 void reset_state(EmulatorState *emulator) {
 	size_t config = emulator->configuration;
+	size_t cycles_per_frame = emulator->cycles_per_frame;
 
 	memset(emulator, 0, sizeof(*emulator));
 
 	emulator->configuration = config;
+	emulator->cycles_per_frame = cycles_per_frame;
+	emulator->pc = PROG_BASE;
 
 	const uint8_t emulator_fonts[80] = {
 		// https://tobiasvl.github.io/blog/write-a-chip-8-emulator/#fx29-font-character
@@ -201,8 +214,6 @@ void reset_state(EmulatorState *emulator) {
 	};
 
 	memcpy(emulator->memory + FONT_BASE_ADDR, emulator_fonts, sizeof(emulator_fonts));
-
-	emulator->pc = PROG_BASE;
 
 	g_debug = false;
 }
@@ -313,7 +324,7 @@ bool handle_input(EmulatorState *emulator) {
 void render(EmulatorState *emulator) {
 	if (g_show_debug_ui) {
 		struct nk_color active_colour = { 230, 150, 150, 255 };
-		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 150),
+		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 250),
 			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
 				     NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE)) {
 			nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
@@ -342,28 +353,37 @@ void render(EmulatorState *emulator) {
 			if (nk_checkbox_label(g_nk_ctx, "Memory", &memory)) {
 				emulator->configuration ^= CONFIG_CHIP8_MEMORY;
 			}
-		}
-		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Registers", nk_rect(250, 0, 400, 230),
+			int selected_cpf = emulator->cycles_per_frame;
+			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+			nk_label(g_nk_ctx, "Cycles/frame", NK_TEXT_LEFT);
+			nk_combobox(g_nk_ctx, CYCLES_PER_FRAME_STR,
+				    sizeof(CYCLES_PER_FRAME) / sizeof(int), &selected_cpf, 20,
+				    nk_vec2(100, 225));
+			emulator->cycles_per_frame = selected_cpf;
+
+			nk_end(g_nk_ctx);
+		}
+
+		if (nk_begin(g_nk_ctx, "Registers", nk_rect(250, 0, 400, 250),
 			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE |
 				     NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR)) {
 			nk_layout_row_dynamic(g_nk_ctx, 30, 4);
 			for (int i = 0; i < sizeof(emulator->registers); ++i) {
-				nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "V%X = 0x%02hx", i,
+				nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "V%X = 0x%02hx", i,
 					  emulator->registers[i]);
 			}
 			nk_layout_row_dynamic(g_nk_ctx, 30, 4);
-			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "PC = 0x%04hx", emulator->pc);
-			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "VI = 0x%04hx", emulator->vi);
-			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "SP = 0x%02hx", emulator->sp);
+			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "PC = 0x%04hx", emulator->pc);
+			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "VI = 0x%04hx", emulator->vi);
+			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "SP = 0x%02hx", emulator->sp);
 			nk_layout_row_dynamic(g_nk_ctx, 30, 4);
-			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "ST = 0x%02hx", emulator->st);
-			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "DT = 0x%02hx", emulator->dt);
+			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "ST = 0x%02hx", emulator->st);
+			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "DT = 0x%02hx", emulator->dt);
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Stack", nk_rect(650, 0, 250, 300),
+		if (nk_begin(g_nk_ctx, "Stack", nk_rect(650, 0, 250, 310),
 			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE |
 				     NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR)) {
 			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
@@ -372,7 +392,7 @@ void render(EmulatorState *emulator) {
 				if (emulator->sp == i) {
 					g_nk_ctx->style.text.color = active_colour;
 				}
-				nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "[%X] 0x%02hx", i,
+				nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "[%X] 0x%02hx", i,
 					  emulator->stack[i]);
 				g_nk_ctx->style.text.color = colour;
 			}
@@ -745,6 +765,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 
 	EmulatorState emulator = { 0 };
 	emulator.configuration = CONFIG_CHIP8;
+	emulator.cycles_per_frame = DEFAULT_CYCLES_PER_FRAME;
 
 	srand(time(NULL));
 	reset_state(&emulator);
@@ -768,7 +789,8 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	while (handle_input(&emulator)) {
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		if (!g_debug) {
-			for (int cycle = 0; cycle < CYCLES_PER_FRAME; ++cycle) {
+			for (int cycle = 0; cycle < CYCLES_PER_FRAME[emulator.cycles_per_frame];
+			     ++cycle) {
 				Chip8Instruction instruction = fetch_next(&emulator, false);
 				if (!execute(&emulator, instruction)) {
 					dump_state(&emulator);

@@ -22,7 +22,6 @@
 
 #define NANOSECONDS_PER_SECOND 1000000000
 #define TARGET_HZ 60
-#define CYCLES_PER_FRAME 100
 
 #define PIXEL_COLOUR 0xFF97F1CD
 #define pixel(emulator, x, y) (emulator)->display[(y) * TARGET_WIDTH + (x)]
@@ -35,6 +34,22 @@
 
 extern const int SCALE_X;
 extern const int SCALE_Y;
+
+typedef enum CyclesPerFrameType {
+	CPF_7 = 0,
+	CPF_10,
+	CPF_15,
+	CPF_20,
+	CPF_30,
+	CPF_100,
+	CPF_200,
+	CPF_500,
+	CPF_1000,
+} CyclesPerFrameType;
+#define DEFAULT_CYCLES_PER_FRAME CPF_100
+
+extern const int CYCLES_PER_FRAME[];
+extern const char *CYCLES_PER_FRAME_STR[];
 
 typedef struct EmulatorState {
 	// 0x000 - 0x1FF = Interpreter memory, not for programs
@@ -73,6 +88,8 @@ typedef struct EmulatorState {
 
 	// CHIP-8 vs SUPER-CHIP/CHIP-48 differences
 	uint8_t configuration;
+
+	CyclesPerFrameType cycles_per_frame;
 } EmulatorState;
 
 void emulate(uint8_t *rom, size_t rom_size, bool debug);
