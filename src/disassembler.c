@@ -6,17 +6,32 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <string.h>
 
 #include "common.h"
 
 #include "stb_ds.h"
 
-void hexdump(void *buffer, size_t length, size_t base) {
-	// TODO: Write to a buffer or return a heap string rather than printing
-	// directly to stdout
+// Disassembly struct:
+// Instruction
+// Address
+
+char *hexdump(void *buffer, size_t length, size_t base) {
+	const char header[] = "Offset    0 1  2 3  4 5  6 7  8 9  A B  C D  E F";
+	const int header_len = sizeof(header);
+
+	// 00000000: 0000 0000 0000 0000 0000 0000 0000 0000  ................\n
+	const int line_len = 68;
+	size_t lines = length / 16;
+	size_t whitespace_needed = 16 - (length % 16);
+	lines = whitespace_needed == 16 ? lines : lines + 1;
+
+	size_t result_len = lines * 68 + header_len; // null byte included from header
+	char *result = malloc(result_len);
+
+	memcpy(result, header, header_len);
+	char *result_ptr = result + header_len - 1;
 	char ascii[17] = { 0 };
-	printf("Offset    0 1  2 3  4 5  6 7  8 9  A B  C D  E F\n");
-	printf("%08zx: ", base);
 	for (size_t i = 0; i < length; ++i) {
 		char byte = ((char *)buffer)[i];
 		if (isprint(byte)) {
@@ -25,28 +40,37 @@ void hexdump(void *buffer, size_t length, size_t base) {
 			ascii[i % 16] = '.';
 		}
 
-		printf("%02hhx", byte);
+		if (i % 16 == 0) {
+			snprintf(result_ptr, 12, "\n%08zx: ", base + i);
+			result_ptr += 11;
+		}
+
+		snprintf(result_ptr, 3, "%02hhx: ", byte);
+		result_ptr += 2;
+
 		if ((i + 1) % 16 == 0) {
-			printf("  %s\n", ascii);
-			if (i + 1 != length) {
-				printf("%08zx: ", base + i + 1);
-			}
+			snprintf(result_ptr, sizeof(ascii) + 2, " %s", ascii);
+			result_ptr += sizeof(ascii);
 		} else if ((i + 1) % 2 == 0) {
-			printf(" ");
+			*result_ptr++ = ' ';
 		}
 	}
 
-	size_t whitespace_needed = 16 - (length % 16);
 	if (whitespace_needed != 16) {
 		for (size_t i = 0; i < whitespace_needed; ++i) {
-			printf("  ");
+			*result_ptr++ = ' ';
+			*result_ptr++ = ' ';
 			if ((i + 1) % 2 == 0) {
-				printf(" ");
+				*result_ptr++ = ' ';
 			}
 			ascii[15 - i] = ' ';
 		}
-		printf(" %s\n", ascii);
+		snprintf(result_ptr, sizeof(ascii) + 2, " %s\n", ascii);
+		result_ptr += sizeof(ascii) + 1;
 	}
+
+	result[result_len - 1] = '\0';
+	return result;
 }
 
 // Recursive descent disassembler

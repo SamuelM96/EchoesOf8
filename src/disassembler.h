@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-void hexdump(void *buffer, size_t length, size_t base);
+char *hexdump(void *buffer, size_t length, size_t base);
 void disassemble_rd(uint8_t *code, size_t length, size_t base);
 void disassemble_linear(uint8_t *code, size_t length, size_t base);
 
