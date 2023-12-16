@@ -36,6 +36,7 @@
 #include <time.h>
 
 bool g_debug = false;
+bool g_show_debug_ui = false;
 const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
 const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
 
@@ -284,6 +285,9 @@ bool handle_input(EmulatorState *emulator) {
 				g_debug = !g_debug;
 				printf("%s emulator\n", g_debug ? "Paused" : "Unpaused");
 				break;
+			case SDL_SCANCODE_H:
+				g_show_debug_ui = !g_show_debug_ui;
+				break;
 			case SDL_SCANCODE_N:
 				if (g_debug) {
 					execute(emulator, fetch_next(emulator, true));
@@ -307,57 +311,73 @@ bool handle_input(EmulatorState *emulator) {
 }
 
 void render(EmulatorState *emulator) {
-	// if (g_debug) {
-	if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 150),
-		     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
-			     NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE)) {
-		nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
-		nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
-		nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFTING;
-		nk_bool clipping = emulator->configuration & CONFIG_CHIP8_CLIPPING;
-		nk_bool jumping = emulator->configuration & CONFIG_CHIP8_JUMPING;
-		nk_bool memory = emulator->configuration & CONFIG_CHIP8_MEMORY;
+	if (g_show_debug_ui) {
+		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 150),
+			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
+				     NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE)) {
+			nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
+			nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
+			nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFTING;
+			nk_bool clipping = emulator->configuration & CONFIG_CHIP8_CLIPPING;
+			nk_bool jumping = emulator->configuration & CONFIG_CHIP8_JUMPING;
+			nk_bool memory = emulator->configuration & CONFIG_CHIP8_MEMORY;
 
-		nk_layout_row_dynamic(g_nk_ctx, 30, 2);
-		if (nk_checkbox_label(g_nk_ctx, "VF Reset", &vf_reset)) {
-			emulator->configuration ^= CONFIG_CHIP8_VF_RESET;
+			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+			if (nk_checkbox_label(g_nk_ctx, "VF Reset", &vf_reset)) {
+				emulator->configuration ^= CONFIG_CHIP8_VF_RESET;
+			}
+			if (nk_checkbox_label(g_nk_ctx, "Display Wait", &disp_wait)) {
+				emulator->configuration ^= CONFIG_CHIP8_DISP_WAIT;
+			}
+			if (nk_checkbox_label(g_nk_ctx, "Clipping", &clipping)) {
+				emulator->configuration ^= CONFIG_CHIP8_CLIPPING;
+			}
+			if (nk_checkbox_label(g_nk_ctx, "Shifting", &shifting)) {
+				emulator->configuration ^= CONFIG_CHIP8_SHIFTING;
+			}
+			if (nk_checkbox_label(g_nk_ctx, "Jumping", &jumping)) {
+				emulator->configuration ^= CONFIG_CHIP8_JUMPING;
+			}
+			if (nk_checkbox_label(g_nk_ctx, "Memory", &memory)) {
+				emulator->configuration ^= CONFIG_CHIP8_MEMORY;
+			}
 		}
-		if (nk_checkbox_label(g_nk_ctx, "Display Wait", &disp_wait)) {
-			emulator->configuration ^= CONFIG_CHIP8_DISP_WAIT;
-		}
-		if (nk_checkbox_label(g_nk_ctx, "Clipping", &clipping)) {
-			emulator->configuration ^= CONFIG_CHIP8_CLIPPING;
-		}
-		if (nk_checkbox_label(g_nk_ctx, "Shifting", &shifting)) {
-			emulator->configuration ^= CONFIG_CHIP8_SHIFTING;
-		}
-		if (nk_checkbox_label(g_nk_ctx, "Jumping", &jumping)) {
-			emulator->configuration ^= CONFIG_CHIP8_JUMPING;
-		}
-		if (nk_checkbox_label(g_nk_ctx, "Memory", &memory)) {
-			emulator->configuration ^= CONFIG_CHIP8_MEMORY;
-		}
-	}
-	nk_end(g_nk_ctx);
+		nk_end(g_nk_ctx);
 
-	if (nk_begin(g_nk_ctx, "Registers", nk_rect(250, 0, 400, 230),
-		     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE |
-			     NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR)) {
-		nk_layout_row_dynamic(g_nk_ctx, 30, 4);
-		for (int i = 0; i < sizeof(emulator->registers); ++i) {
-			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "V%X = 0x%02hx", i,
-				  emulator->registers[i]);
+		if (nk_begin(g_nk_ctx, "Registers", nk_rect(250, 0, 400, 230),
+			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE |
+				     NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR)) {
+			nk_layout_row_dynamic(g_nk_ctx, 30, 4);
+			for (int i = 0; i < sizeof(emulator->registers); ++i) {
+				nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "V%X = 0x%02hx", i,
+					  emulator->registers[i]);
+			}
+			nk_layout_row_dynamic(g_nk_ctx, 30, 4);
+			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "PC = 0x%04hx", emulator->pc);
+			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "VI = 0x%04hx", emulator->vi);
+			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "SP = 0x%02hx", emulator->sp);
+			nk_layout_row_dynamic(g_nk_ctx, 30, 4);
+			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "ST = 0x%02hx", emulator->st);
+			nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "DT = 0x%02hx", emulator->dt);
 		}
-		nk_layout_row_dynamic(g_nk_ctx, 30, 4);
-		nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "PC = 0x%04hx", emulator->pc);
-		nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "VI = 0x%04hx", emulator->vi);
-		nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "SP = 0x%02hx", emulator->sp);
-		nk_layout_row_dynamic(g_nk_ctx, 30, 4);
-		nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "ST = 0x%02hx", emulator->st);
-		nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "DT = 0x%02hx", emulator->dt);
+		nk_end(g_nk_ctx);
+
+		if (nk_begin(g_nk_ctx, "Stack", nk_rect(650, 0, 250, 300),
+			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_MINIMIZABLE |
+				     NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR)) {
+			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+			for (int i = 0; i < sizeof(emulator->stack); ++i) {
+				if (emulator->sp == i) {
+					nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "[%X] 0x%02hx  <--",
+						  i, emulator->stack[i]);
+				} else {
+					nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "[%X] 0x%02hx", i,
+						  emulator->stack[i]);
+				}
+			}
+		}
+		nk_end(g_nk_ctx);
 	}
-	nk_end(g_nk_ctx);
-	// }
 
 	SDL_SetRenderTarget(g_renderer, g_texture);
 	SDL_UpdateTexture(g_texture, NULL, emulator->display, TARGET_WIDTH * sizeof(uint32_t));
@@ -737,7 +757,11 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 
 	if (debug) {
 		g_debug = true;
-		printf("Debugging enabled! Press <SPACE> pause/unpause.\n");
+		g_show_debug_ui = true;
+		printf("Debugging enabled!\n");
+		printf("  - <SPACE> to pause/unpause\n");
+		printf("  - <H> to toggle debug UI\n");
+		printf("  - <N> to step (execute the next instruction)\n");
 	}
 
 	while (handle_input(&emulator)) {
