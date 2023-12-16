@@ -312,6 +312,7 @@ bool handle_input(EmulatorState *emulator) {
 
 void render(EmulatorState *emulator) {
 	if (g_show_debug_ui) {
+		struct nk_color active_colour = { 230, 150, 150, 255 };
 		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 150),
 			     NK_WINDOW_BORDER | NK_WINDOW_MOVABLE | NK_WINDOW_SCALABLE |
 				     NK_WINDOW_MINIMIZABLE | NK_WINDOW_TITLE)) {
@@ -367,13 +368,13 @@ void render(EmulatorState *emulator) {
 				     NK_WINDOW_TITLE | NK_WINDOW_NO_SCROLLBAR)) {
 			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
 			for (int i = 0; i < sizeof(emulator->stack); ++i) {
+				struct nk_color colour = g_nk_ctx->style.text.color;
 				if (emulator->sp == i) {
-					nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "[%X] 0x%02hx  <--",
-						  i, emulator->stack[i]);
-				} else {
-					nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "[%X] 0x%02hx", i,
-						  emulator->stack[i]);
+					g_nk_ctx->style.text.color = active_colour;
 				}
+				nk_labelf(g_nk_ctx, NK_TEXT_ALIGN_LEFT, "[%X] 0x%02hx", i,
+					  emulator->stack[i]);
+				g_nk_ctx->style.text.color = colour;
 			}
 		}
 		nk_end(g_nk_ctx);
