@@ -43,6 +43,7 @@ void print_usage() {
 	printf("                                    Methods:\n");
 	printf("                                      - linear       Linear sweep\n");
 	printf("                                      - recursive    Recursive descent\n");
+	printf("    decompile <rom>               Decompiles the ROM into readable source code\n");
 	printf("    assessmble <asm> <rom>        Assessmbles the given assembly code into a CHIP-8 ROM\n");
 	printf("    compile <source> <rom>        Compiles the given source code into a CHIP-8 ROM\n");
 	printf("    emulate <rom> [--debug]       Emulates the ROM\n");
@@ -75,6 +76,14 @@ int main(int argc, char *argv[]) {
 			buffer = read_rom(argv[3], &buffer_size);
 			disassemble_rd(buffer, buffer_size, PROG_BASE);
 		}
+	} else if (strcmp(argv[1], "decompile") == 0) {
+		if (argc != 3) {
+			print_usage();
+			return EXIT_FAILURE;
+		}
+		// TODO: Implement decompiler
+		printf("!!! NOT IMPLEMENTED !!!\n");
+		return EXIT_FAILURE;
 	} else if (strcmp(argv[1], "assemble") == 0) {
 		if (argc != 4) {
 			print_usage();
@@ -98,6 +107,7 @@ int main(int argc, char *argv[]) {
 			print_usage();
 			return EXIT_FAILURE;
 		}
+		// TODO: Implement compiler
 		printf("!!! NOT IMPLEMENTED !!!\n");
 		return EXIT_FAILURE;
 	} else if (strcmp(argv[1], "emulate") == 0) {

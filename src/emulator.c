@@ -42,7 +42,7 @@ const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
 const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
 
 const int CYCLES_PER_FRAME[] = {
-	[CPF_7] = 7,	 [CPF_15] = 15,	  [CPF_20] = 20,   [CPF_30] = 30,
+	[CPF_7] = 7,	 [CPF_10] = 10,	  [CPF_15] = 15,   [CPF_20] = 20,     [CPF_30] = 30,
 	[CPF_100] = 100, [CPF_200] = 200, [CPF_500] = 500, [CPF_1000] = 1000,
 };
 const char *CYCLES_PER_FRAME_STR[] = {
@@ -58,6 +58,7 @@ SDL_Texture *g_texture = NULL;
 struct nk_context *g_nk_ctx;
 
 // Beeper state
+// TODO: Bundle into a struct and pass via userdata(?)
 SDL_AudioSpec g_beeper_spec;
 SDL_AudioDeviceID g_beeper_id;
 double g_beeper_volume = 0.1;
@@ -119,6 +120,7 @@ void beeper_state(bool on) {
 }
 
 void handle_timers(EmulatorState *emulator) {
+	// TODO: Handle timers in debug mode
 	if (emulator->dt > 0) {
 		emulator->dt--;
 	}
@@ -301,6 +303,13 @@ bool handle_input(EmulatorState *emulator) {
 				g_show_debug_ui = !g_show_debug_ui;
 				break;
 			case SDL_SCANCODE_N:
+				// TODO: Breakpoints support
+				// TODO: Continue until panic or breakpoint
+				// TODO: Conditional breakpoints, e.g., break on all DRW
+				// instructions
+				// TODO: Step in and out of functions
+				// TODO: Separate out debugging logic and state
+				// TODO: Timeless debugging like rr
 				if (g_debug) {
 					execute(emulator, fetch_next(emulator, true));
 					dump_registers(emulator);
@@ -326,6 +335,17 @@ void render(EmulatorState *emulator) {
 	SDL_SetRenderDrawColor(g_renderer, 0x60, 0x65, 0x6A, 0xFF);
 	SDL_RenderClear(g_renderer);
 
+	// TODO: Load ROMs at runtime
+	// TODO: Clean up handling of coordiantes and sizes
+	// TODO: Handle window resizing whilst maintaining aspect ratio of emulator display
+	// TODO: Scale and resize emulator display dynamically
+	// TODO: Change pixel colours
+	// TODO: Debugging buttons
+	// TODO: Shows sprites in memory
+	// TODO: Save and load emulator state (snapshots)
+	// TODO: Debugging buttons
+	// TODO: Call graph
+	// TODO: Decompiler output
 	if (g_show_debug_ui) {
 		const int window_flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE |
 					 NK_WINDOW_NO_SCROLLBAR;
@@ -386,6 +406,7 @@ void render(EmulatorState *emulator) {
 		nk_end(g_nk_ctx);
 
 		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 890, 240), window_flags)) {
+			// TODO: Show live memory dump
 		}
 		nk_end(g_nk_ctx);
 
@@ -406,6 +427,7 @@ void render(EmulatorState *emulator) {
 		nk_end(g_nk_ctx);
 
 		if (nk_begin(g_nk_ctx, "Disassembly", nk_rect(890, 0, 390, 800), window_flags)) {
+			// TODO: Show live disassembly of the instructions being executed
 		}
 		nk_end(g_nk_ctx);
 	} else {

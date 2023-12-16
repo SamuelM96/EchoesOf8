@@ -266,6 +266,7 @@ Chip8Instruction parse_line(char *line, char **out_label) {
 }
 
 Chip8Instruction *assemble(char *source_filename) {
+	// TODO: Debugging symbols
 	bool valid = true;
 	Chip8Instruction *instructions = NULL;
 	struct {

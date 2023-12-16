@@ -12,6 +12,8 @@
 #include "stb_ds.h"
 
 void hexdump(void *buffer, size_t length, size_t base) {
+	// TODO: Write to a buffer or return a heap string rather than printing
+	// directly to stdout
 	char ascii[17] = { 0 };
 	printf("Offset    0 1  2 3  4 5  6 7  8 9  A B  C D  E F\n");
 	printf("%08zx: ", base);
@@ -49,6 +51,8 @@ void hexdump(void *buffer, size_t length, size_t base) {
 
 // Recursive descent disassembler
 void disassemble_rd(uint8_t *code, size_t length, size_t base) {
+	// TODO: Write to a buffer or return a heap string rather than printing
+	// directly to stdout
 	if (length % 2 != 0) {
 		fprintf(stderr, "Cannot disassemble code: not aligned to 2 bytes");
 		return;
@@ -120,6 +124,8 @@ void disassemble_rd(uint8_t *code, size_t length, size_t base) {
 
 // Linear sweep disassembler
 void disassemble_linear(uint8_t *code, size_t length, size_t base) {
+	// TODO: Write to a buffer or return a heap string rather than printing
+	// directly to stdout
 	if (length % 2 != 0) {
 		fprintf(stderr, "Cannot disassemble code: not aligned to 2 bytes");
 		return;
