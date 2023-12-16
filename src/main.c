@@ -1,9 +1,10 @@
 #include "assembler.h"
 #include "common.h"
 #include "disassembler.h"
-
-#include "../lib/stb_ds.h"
 #include "emulator.h"
+
+#define STB_DS_IMPLEMENTATION
+#include "stb_ds.h"
 
 #include <stdio.h>
 #include <stdlib.h>

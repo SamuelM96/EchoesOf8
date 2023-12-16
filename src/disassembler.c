@@ -9,8 +9,7 @@
 
 #include "common.h"
 
-#define STB_DS_IMPLEMENTATION
-#include "../lib/stb_ds.h"
+#include "stb_ds.h"
 
 void hexdump(void *buffer, size_t length, size_t base) {
 	char ascii[17] = { 0 };

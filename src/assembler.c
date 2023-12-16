@@ -1,7 +1,7 @@
 #include "assembler.h"
 #include "common.h"
 
-#include "../lib/stb_ds.h"
+#include "stb_ds.h"
 
 #include <ctype.h>
 #include <stdint.h>

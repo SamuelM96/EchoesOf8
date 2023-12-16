@@ -77,6 +77,7 @@ typedef struct EmulatorState {
 
 void emulate(uint8_t *rom, size_t rom_size, bool debug);
 
+static void beeper_callback(void *, uint8_t *, int);
 void beeper_state(bool);
 static void beeper_callback(void *, uint8_t *, int);
 void handle_timers(EmulatorState *);
