@@ -77,6 +77,8 @@ typedef struct EmulatorState {
 
 void emulate(uint8_t *rom, size_t rom_size, bool debug);
 
+void beeper_state(bool);
+static void beeper_callback(void *, uint8_t *, int);
 void handle_timers(EmulatorState *);
 Chip8Instruction fetch_next(EmulatorState *, bool);
 void dump_registers(EmulatorState *);
@@ -84,7 +86,7 @@ void dump_stack(EmulatorState *);
 static inline void dump_memory(EmulatorState *);
 void dump_state(EmulatorState *);
 void reset_state(EmulatorState *);
-void init_graphics();
+void init_sdl();
 void update_keyboard_state(EmulatorState *, SDL_Scancode, uint8_t);
 bool handle_input(EmulatorState *);
 void render(uint32_t *);

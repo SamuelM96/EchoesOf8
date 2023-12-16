@@ -4,11 +4,15 @@
 #include "instructions.h"
 
 #include <SDL.h>
+#include <SDL_audio.h>
+#include <SDL_error.h>
 #include <SDL_events.h>
 #include <SDL_keyboard.h>
+#include <SDL_log.h>
 #include <SDL_pixels.h>
 #include <SDL_render.h>
 #include <SDL_scancode.h>
+#include <SDL_stdinc.h>
 #include <SDL_surface.h>
 #include <SDL_video.h>
 
@@ -28,13 +32,78 @@ SDL_Window *g_window = NULL;
 SDL_Renderer *g_renderer = NULL;
 SDL_Texture *g_texture = NULL;
 
+// Beeper state
+SDL_AudioSpec g_beeper_spec;
+SDL_AudioDeviceID g_beeper_id;
+double g_beeper_volume = 0.1;
+double g_beeper_current_volume = 0.0;
+double g_beeper_frequency = 261.63;
+double g_beeper_phase = 0.0;
+bool g_beeper_in_attack = false;
+bool g_beeper_in_release = false;
+bool g_beeper_on = false;
+
+// Sawtooth beeper
+static void beeper_callback(void *userdata, uint8_t *_stream, int _len) {
+	const double attack_release_time = 0.005;
+
+	int16_t *stream = (int16_t *)_stream;
+	int len = _len / sizeof(int16_t);
+
+	double attack_release_delta = g_beeper_volume / (attack_release_time * g_beeper_spec.freq);
+	double phase_increment = 2.0 * g_beeper_frequency / g_beeper_spec.freq;
+
+	for (int sample = 0; sample < len; ++sample) {
+		g_beeper_phase += phase_increment;
+		if (g_beeper_phase >= 1.0)
+			g_beeper_phase -= 2.0;
+
+		if (g_beeper_in_attack) {
+			g_beeper_current_volume += attack_release_delta;
+			if (g_beeper_current_volume >= g_beeper_volume) {
+				g_beeper_current_volume = g_beeper_volume;
+				g_beeper_in_attack = false;
+			}
+		}
+
+		if (g_beeper_in_release) {
+			g_beeper_current_volume -= attack_release_delta;
+			if (g_beeper_current_volume <= 0.0) {
+				g_beeper_current_volume = 0.0;
+				g_beeper_in_release = false;
+				SDL_PauseAudioDevice(g_beeper_id, 1);
+			}
+		}
+
+		stream[sample] = g_beeper_phase * g_beeper_current_volume * INT16_MAX / 2.0;
+	}
+}
+
+void beeper_state(bool on) {
+	if (!g_beeper_on && on) {
+		g_beeper_on = true;
+		g_beeper_in_attack = true;
+		g_beeper_in_release = false;
+		g_beeper_current_volume = 0.0;
+		SDL_PauseAudioDevice(g_beeper_id, 0);
+	} else if (g_beeper_on && !on) {
+		g_beeper_on = false;
+		g_beeper_in_attack = false;
+		g_beeper_in_release = true;
+	}
+}
+
 void handle_timers(EmulatorState *emulator) {
 	if (emulator->dt > 0) {
 		emulator->dt--;
 	}
 	if (emulator->st > 0) {
 		emulator->st--;
-		// TODO: Make a beep
+		if (!g_debug) {
+			beeper_state(true);
+		}
+	} else {
+		beeper_state(false);
 	}
 }
 
@@ -127,26 +196,6 @@ void reset_state(EmulatorState *emulator) {
 	emulator->display_interrupted = false;
 
 	g_debug = false;
-}
-
-void init_graphics() {
-	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		fprintf(stderr, "[!] SDL could not initialise! SDL error: %s\n", SDL_GetError());
-	} else {
-		g_window = SDL_CreateWindow("EchoesOf8 - CHIP-8 Emulator", SDL_WINDOWPOS_UNDEFINED,
-					    SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT,
-					    SDL_WINDOW_SHOWN);
-		if (g_window == NULL) {
-			fprintf(stderr, "[!] Window could not be created! SDL error: %s\n",
-				SDL_GetError());
-		} else {
-			g_renderer = SDL_CreateRenderer(g_window, -1, SDL_TEXTUREACCESS_TARGET);
-
-			g_texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
-						      SDL_TEXTUREACCESS_TARGET, TARGET_WIDTH,
-						      TARGET_HEIGHT);
-		}
-	}
 }
 
 void update_keyboard_state(EmulatorState *emulator, SDL_Scancode scancode, uint8_t state) {
@@ -261,6 +310,7 @@ void cleanup() {
 	SDL_DestroyTexture(g_texture);
 	SDL_DestroyRenderer(g_renderer);
 	SDL_DestroyWindow(g_window);
+	SDL_CloseAudioDevice(g_beeper_id);
 	SDL_Quit();
 }
 
@@ -530,6 +580,40 @@ bool process_instruction(EmulatorState *emulator, Chip8Instruction instruction) 
 	return true;
 }
 
+void init_sdl() {
+	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
+		fprintf(stderr, "[!] SDL could not initialise! SDL error: %s\n", SDL_GetError());
+	} else {
+		g_window = SDL_CreateWindow("EchoesOf8 - CHIP-8 Emulator", SDL_WINDOWPOS_UNDEFINED,
+					    SDL_WINDOWPOS_UNDEFINED, SCREEN_WIDTH, SCREEN_HEIGHT,
+					    SDL_WINDOW_SHOWN);
+		if (g_window == NULL) {
+			fprintf(stderr, "[!] Window could not be created! SDL error: %s\n",
+				SDL_GetError());
+		} else {
+			g_renderer = SDL_CreateRenderer(g_window, -1, SDL_TEXTUREACCESS_TARGET);
+
+			g_texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_ARGB8888,
+						      SDL_TEXTUREACCESS_TARGET, TARGET_WIDTH,
+						      TARGET_HEIGHT);
+		}
+
+		SDL_AudioSpec spec = { 0 };
+
+		spec.freq = 44100;
+		spec.samples = 2048;
+		spec.channels = 1;
+		spec.format = AUDIO_S16;
+		spec.callback = beeper_callback;
+		g_beeper_id = SDL_OpenAudioDevice(NULL, 0, &spec, &g_beeper_spec, 0);
+
+		if (g_beeper_id == 0) {
+			SDL_Log("Failed to open audio device: %s", SDL_GetError());
+			// TODO: Handle error
+		}
+	}
+}
+
 void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	printf("Emulating!\n");
 
@@ -538,7 +622,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 
 	srand(time(NULL));
 	reset_state(&emulator);
-	init_graphics();
+	init_sdl();
 
 	memcpy(emulator.memory + PROG_BASE, rom, rom_size);
 
