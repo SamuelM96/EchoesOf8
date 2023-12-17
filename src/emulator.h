@@ -52,6 +52,10 @@ extern const int CYCLES_PER_FRAME[];
 extern const char *CYCLES_PER_FRAME_STR[];
 
 typedef struct EmulatorState {
+	// ROM to be loaded into RAM and executed
+	uint8_t *rom;
+	size_t rom_size;
+
 	// 0x000 - 0x1FF = Interpreter memory, not for programs
 	// Programs start at 0x200 (512)
 	// Some start at 0x600 (1536) (ETI 660 computer)

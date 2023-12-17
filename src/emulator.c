@@ -201,11 +201,15 @@ void dump_state(EmulatorState *emulator) {
 }
 
 void reset_state(EmulatorState *emulator) {
+	uint8_t *rom = emulator->rom;
+	size_t rom_size = emulator->rom_size;
 	size_t config = emulator->configuration;
 	size_t cycles_per_frame = emulator->cycles_per_frame;
 
-	memset(emulator, 0, sizeof(*emulator));
+	memset(emulator, 0, sizeof(EmulatorState));
 
+	emulator->rom = rom;
+	emulator->rom_size = rom_size;
 	emulator->configuration = config;
 	emulator->cycles_per_frame = cycles_per_frame;
 	emulator->pc = PROG_BASE;
@@ -232,9 +236,17 @@ void reset_state(EmulatorState *emulator) {
 
 	memcpy(emulator->memory + FONT_BASE_ADDR, emulator_fonts, sizeof(emulator_fonts));
 
+	memcpy(emulator->memory + PROG_BASE, emulator->rom, emulator->rom_size);
+
 	g_debug = false;
 	g_written_to_memory = false;
 	g_latest_memory_dump = hexdump(emulator->memory, sizeof(emulator->memory), 0);
+}
+
+void load_rom(EmulatorState *emulator, uint8_t *rom, size_t rom_size) {
+	emulator->rom = rom;
+	emulator->rom_size = rom_size;
+	reset_state(emulator);
 }
 
 void update_keyboard_state(EmulatorState *emulator, SDL_Scancode scancode, uint8_t state) {
@@ -351,17 +363,14 @@ void render(EmulatorState *emulator) {
 	SDL_SetRenderDrawColor(g_renderer, 0x60, 0x65, 0x6A, 0xFF);
 	SDL_RenderClear(g_renderer);
 
-	// TODO: Reset button
 	// TODO: Audio controls
 	// TODO: Load ROMs at runtime
 	// TODO: Clean up handling of coordiantes and sizes
 	// TODO: Handle window resizing whilst maintaining aspect ratio of emulator display
 	// TODO: Scale and resize emulator display dynamically
 	// TODO: Change pixel colours
-	// TODO: Debugging buttons
 	// TODO: Shows sprites in memory
 	// TODO: Save and load emulator state (snapshots)
-	// TODO: Debugging buttons
 	// TODO: Call graph
 	// TODO: Decompiler output
 	// TODO: Audio waveform
@@ -424,9 +433,8 @@ void render(EmulatorState *emulator) {
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 890, 240),
+		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 570, 240),
 			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
-			// TODO: Show live memory dump
 			// TODO: Jump to PC button
 			// TODO: Jump to address from text field
 			nk_layout_row_dynamic(g_nk_ctx, 15, 1);
@@ -442,6 +450,16 @@ void render(EmulatorState *emulator) {
 				if (*temp == '\0')
 					break;
 				dump_ptr = temp + 1;
+			}
+		}
+		nk_end(g_nk_ctx);
+
+		if (nk_begin(g_nk_ctx, "Debug", nk_rect(570, 560, 320, 240), window_flags)) {
+			// TODO: Reset button
+			// TODO: Debugging buttons
+			nk_layout_row_dynamic(g_nk_ctx, 30, 1);
+			if (nk_button_label(g_nk_ctx, "Reset")) {
+				reset_state(emulator);
 			}
 		}
 		nk_end(g_nk_ctx);
@@ -821,7 +839,7 @@ void init_graphics() {
 				struct nk_font *font;
 
 				nk_sdl_font_stash_begin(&atlas);
-				font = nk_font_atlas_add_default(atlas, 13 * font_scale, &config);
+				font = nk_font_atlas_add_default(atlas, 15 * font_scale, &config);
 				nk_sdl_font_stash_end();
 
 				font->handle.height /= font_scale;
@@ -854,10 +872,8 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	emulator.cycles_per_frame = DEFAULT_CYCLES_PER_FRAME;
 
 	srand(time(NULL));
-	reset_state(&emulator);
+	load_rom(&emulator, rom, rom_size);
 	init_graphics();
-
-	memcpy(emulator.memory + PROG_BASE, rom, rom_size);
 
 	struct timespec start, current;
 	long long frame_time = NANOSECONDS_PER_SECOND / TARGET_HZ;
