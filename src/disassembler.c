@@ -49,8 +49,8 @@ char *hexdump(void *buffer, size_t length, size_t base) {
 		result_ptr += 2;
 
 		if ((i + 1) % 16 == 0) {
-			snprintf(result_ptr, sizeof(ascii) + 2, " %s", ascii);
-			result_ptr += sizeof(ascii);
+			snprintf(result_ptr, sizeof(ascii) + 3, "  %s", ascii);
+			result_ptr += sizeof(ascii) + 1;
 		} else if ((i + 1) % 2 == 0) {
 			*result_ptr++ = ' ';
 		}
@@ -65,7 +65,7 @@ char *hexdump(void *buffer, size_t length, size_t base) {
 			}
 			ascii[15 - i] = ' ';
 		}
-		snprintf(result_ptr, sizeof(ascii) + 2, " %s\n", ascii);
+		snprintf(result_ptr, sizeof(ascii) + 3, "  %s\n", ascii);
 		result_ptr += sizeof(ascii) + 1;
 	}
 

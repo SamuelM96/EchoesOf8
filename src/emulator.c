@@ -36,6 +36,8 @@
 #include <string.h>
 #include <time.h>
 
+char *g_latest_memory_dump = NULL;
+bool g_written_to_memory = false;
 bool g_debug = false;
 bool g_show_debug_ui = false;
 const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
@@ -175,9 +177,21 @@ void dump_stack(EmulatorState *emulator) {
 	}
 }
 
+void refresh_dump(EmulatorState *emulator) {
+	if (g_written_to_memory || !g_latest_memory_dump) {
+		if (g_latest_memory_dump) {
+			free(g_latest_memory_dump);
+		}
+		g_latest_memory_dump = hexdump(emulator->memory, sizeof(emulator->memory), 0);
+		g_written_to_memory = false;
+	}
+}
 static inline void dump_memory(EmulatorState *emulator) {
 	fprintf(stderr, "\n===== MEMORY DUMP ====\n");
-	hexdump(emulator->memory, sizeof(emulator->memory), 0);
+	if (!g_latest_memory_dump) {
+		refresh_dump(emulator);
+	}
+	printf("%s\n", g_latest_memory_dump);
 }
 
 void dump_state(EmulatorState *emulator) {
@@ -219,6 +233,8 @@ void reset_state(EmulatorState *emulator) {
 	memcpy(emulator->memory + FONT_BASE_ADDR, emulator_fonts, sizeof(emulator_fonts));
 
 	g_debug = false;
+	g_written_to_memory = false;
+	g_latest_memory_dump = hexdump(emulator->memory, sizeof(emulator->memory), 0);
 }
 
 void update_keyboard_state(EmulatorState *emulator, SDL_Scancode scancode, uint8_t state) {
@@ -408,10 +424,25 @@ void render(EmulatorState *emulator) {
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 890, 240), window_flags)) {
+		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 890, 240),
+			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
 			// TODO: Show live memory dump
 			// TODO: Jump to PC button
 			// TODO: Jump to address from text field
+			nk_layout_row_dynamic(g_nk_ctx, 15, 1);
+			refresh_dump(emulator);
+			char *dump_ptr = g_latest_memory_dump;
+			while (true) {
+				char *temp = dump_ptr;
+				while (*temp != '\n' && *temp != '\0')
+					++temp;
+
+				nk_text(g_nk_ctx, dump_ptr, temp - dump_ptr, NK_TEXT_LEFT);
+
+				if (*temp == '\0')
+					break;
+				dump_ptr = temp + 1;
+			}
 		}
 		nk_end(g_nk_ctx);
 
@@ -721,6 +752,7 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 		break;
 	}
 	case CHIP8_LD_I_VX:
+		g_written_to_memory = true;
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			emulator->memory[emulator->vi + i] = emulator->registers[i];
 		}
