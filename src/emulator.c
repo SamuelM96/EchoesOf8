@@ -140,8 +140,9 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 	static uint16_t prev_inst_addr = 0;
 	Chip8Instruction instruction = bytes2inst(&emulator->memory[emulator->pc]);
 	if (emulator->pc != prev_inst_addr && trace) {
-		print_asm(instruction);
-		printf("\t");
+		char *asm_str = inst2str(instruction);
+		printf("%s\t", asm_str);
+		free(asm_str);
 		print_instruction_state(emulator, instruction);
 		printf("\n");
 	}
@@ -910,8 +911,8 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 					g_debug = true;
 					printf("\n[!] Something went wrong @ 0x%03hx: ",
 					       emulator.pc - 2);
-					print_asm(instruction);
-					printf("\n");
+					char *asm_str = inst2str(instruction);
+					printf("%s\n", asm_str);
 				}
 				if (emulator.display_interrupted) {
 					break;

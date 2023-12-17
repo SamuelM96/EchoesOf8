@@ -73,10 +73,19 @@ int main(int argc, char *argv[]) {
 		}
 		if (strcmp(argv[2], "linear") == 0) {
 			buffer = read_rom(argv[3], &buffer_size);
-			disassemble_linear(buffer, buffer_size, PROG_BASE);
+			Disassembly disassembly =
+				disassemble_linear(buffer, buffer_size, PROG_BASE);
+			char *disasm_str = disassembly2str(&disassembly);
+			printf("%s\n", disasm_str);
+			free(disasm_str);
+			free_disassembly(&disassembly);
 		} else if (strcmp(argv[2], "recursive") == 0) {
 			buffer = read_rom(argv[3], &buffer_size);
-			disassemble_rd(buffer, buffer_size, PROG_BASE);
+			Disassembly disassembly = disassemble_rd(buffer, buffer_size, PROG_BASE);
+			char *disasm_str = disassembly2str(&disassembly);
+			printf("%s\n", disasm_str);
+			free(disasm_str);
+			free_disassembly(&disassembly);
 		}
 	} else if (strcmp(argv[1], "decompile") == 0) {
 		if (argc != 3) {
