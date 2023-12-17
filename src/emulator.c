@@ -306,6 +306,13 @@ void update_keyboard_state(EmulatorState *emulator, SDL_Scancode scancode, uint8
 	}
 }
 
+void debug_step(EmulatorState *emulator) {
+	execute(emulator, fetch_next(emulator, true));
+	dump_registers(emulator);
+	dump_stack(emulator);
+	printf("\n");
+}
+
 bool handle_input(EmulatorState *emulator) {
 	SDL_Event e;
 	nk_input_begin(g_nk_ctx);
@@ -331,18 +338,8 @@ bool handle_input(EmulatorState *emulator) {
 				g_show_debug_ui = !g_show_debug_ui;
 				break;
 			case SDL_SCANCODE_N:
-				// TODO: Breakpoints support
-				// TODO: Continue until panic or breakpoint
-				// TODO: Conditional breakpoints, e.g., break on all DRW
-				// instructions
-				// TODO: Step in and out of functions
-				// TODO: Separate out debugging logic and state
-				// TODO: Timeless debugging like rr
 				if (g_debug) {
-					execute(emulator, fetch_next(emulator, true));
-					dump_registers(emulator);
-					dump_stack(emulator);
-					printf("\n");
+					debug_step(emulator);
 				}
 				break;
 			default:
@@ -455,8 +452,22 @@ void render(EmulatorState *emulator) {
 		nk_end(g_nk_ctx);
 
 		if (nk_begin(g_nk_ctx, "Debug", nk_rect(570, 560, 320, 240), window_flags)) {
-			// TODO: Reset button
-			// TODO: Debugging buttons
+			// TODO: Breakpoints support
+			// TODO: Continue until panic or breakpoint
+			// TODO: Conditional breakpoints, e.g., break on all DRW
+			// instructions
+			// TODO: Step in and out of functions
+			// TODO: Separate out debugging logic and state
+			// TODO: Timeless debugging like rr
+			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+			if (nk_button_label(g_nk_ctx, g_debug ? "Resume" : "Pause")) {
+				g_debug = !g_debug;
+			}
+			if (nk_button_label(g_nk_ctx, "Step")) {
+				debug_step(emulator);
+			}
+			nk_layout_row_dynamic(g_nk_ctx, 5, 1);
+			nk_spacer(g_nk_ctx);
 			nk_layout_row_dynamic(g_nk_ctx, 30, 1);
 			if (nk_button_label(g_nk_ctx, "Reset")) {
 				reset_state(emulator);
