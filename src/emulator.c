@@ -46,6 +46,7 @@ Disassembly g_disassembly;
 char *g_latest_memory_dump = NULL;
 bool g_written_to_memory = false;
 bool g_debug = false;
+bool g_skip_breakpoints = false;
 nk_bool g_breakpoints[EMULATOR_MEMORY_SIZE] = { false };
 bool g_breakpoint_hit = false;
 bool g_show_debug_ui = false;
@@ -392,6 +393,9 @@ bool handle_input(EmulatorState *emulator) {
 					g_debug = !g_debug;
 					printf("%s emulator\n", g_debug ? "Paused" : "Unpaused");
 					break;
+				case SDL_SCANCODE_G:
+					g_skip_breakpoints = !g_skip_breakpoints;
+					break;
 				case SDL_SCANCODE_H:
 					g_show_debug_ui = !g_show_debug_ui;
 					break;
@@ -521,19 +525,19 @@ void render(EmulatorState *emulator) {
 		nk_end(g_nk_ctx);
 
 		if (nk_begin(g_nk_ctx, "Debug", nk_rect(570, 560, 320, 240), window_flags)) {
-			// TODO: Continue until panic or breakpoint
 			// TODO: Conditional breakpoints, e.g., break on all DRW
 			// instructions
 			// TODO: Step in and out of functions
 			// TODO: Separate out debugging logic and state
 			// TODO: Timeless debugging like rr
-			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+			nk_layout_row_dynamic(g_nk_ctx, 30, 3);
 			if (nk_button_label(g_nk_ctx, g_debug ? "Resume" : "Pause")) {
 				g_debug = !g_debug;
 			}
 			if (nk_button_label(g_nk_ctx, "Step")) {
 				debug_step(emulator);
 			}
+			nk_checkbox_label(g_nk_ctx, "Ignore BPs", &g_skip_breakpoints);
 
 			nk_layout_row_dynamic(g_nk_ctx, 5, 1);
 			nk_spacer(g_nk_ctx);
@@ -1088,7 +1092,10 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 		if (!g_debug) {
 			for (int cycle = 0; cycle < CYCLES_PER_FRAME[emulator.cycles_per_frame];
 			     ++cycle) {
-				if (g_breakpoints[emulator.pc] && !g_breakpoint_hit) {
+				// FIX: Input isn't handled during this loop, so it can miss
+				// instructions
+				if (!g_skip_breakpoints && g_breakpoints[emulator.pc] &&
+				    !g_breakpoint_hit) {
 					g_breakpoint_hit = true;
 					g_debug = true;
 					printf("Hit breakpoint @ 0x%03hx\n", emulator.pc);
