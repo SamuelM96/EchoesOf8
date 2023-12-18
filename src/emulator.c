@@ -1087,13 +1087,15 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 		printf("  - <N> to step (execute the next instruction)\n");
 	}
 
-	while (handle_input(&emulator)) {
+	bool running = true;
+	while (running) {
+		running = handle_input(&emulator);
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		if (!g_debug) {
-			for (int cycle = 0; cycle < CYCLES_PER_FRAME[emulator.cycles_per_frame];
+			for (int cycle = 0;
+			     cycle < CYCLES_PER_FRAME[emulator.cycles_per_frame] && running;
 			     ++cycle) {
-				// FIX: Input isn't handled during this loop, so it can miss
-				// instructions
+				running = handle_input(&emulator);
 				if (!g_skip_breakpoints && g_breakpoints[emulator.pc] &&
 				    !g_breakpoint_hit) {
 					g_breakpoint_hit = true;
