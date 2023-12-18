@@ -181,7 +181,6 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 		}
 	}
 
-	printf("Length: 0x%zx\nAddressbook: 0x%zx\n", length, disassembly.abook_length);
 	assert(disassembly.abook_length == length);
 
 	return disassembly;
