@@ -282,9 +282,6 @@ void free_disassembly(Disassembly *disassembly) {
 	}
 
 	if (disassembly->data_blocks) {
-		for (int i = 0; i < disassembly->dblock_length; ++i) {
-			free(disassembly->data_blocks[i].data);
-		}
 		arrfree(disassembly->data_blocks);
 	}
 
