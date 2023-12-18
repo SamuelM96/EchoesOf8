@@ -244,8 +244,8 @@ void reset_state(EmulatorState *emulator) {
 
 	g_written_to_memory = false;
 	g_latest_memory_dump = hexdump(emulator->memory, sizeof(emulator->memory), 0);
-	g_disassembly =
-		disassemble_linear(emulator->memory + PROG_BASE, emulator->rom_size, PROG_BASE);
+	g_disassembly = disassemble_rd(emulator->memory + PROG_BASE,
+				       sizeof(emulator->memory) - PROG_BASE, PROG_BASE);
 }
 
 void load_rom(EmulatorState *emulator, uint8_t *rom, size_t rom_size) {
@@ -498,31 +498,48 @@ void render(EmulatorState *emulator) {
 
 		if (nk_begin(g_nk_ctx, "Disassembly", nk_rect(890, 0, 390, 800),
 			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
-			// TODO: Switch to recursive disassembly
-			// TODO: Handle instructions at odd alignments
 			// TODO: Track memory allocations to detect new instructions
 			// TODO: Replace with a list view-like setup. Nuklear groups?
 
 			struct nk_window *win = g_nk_ctx->current;
 			nk_layout_row_dynamic(g_nk_ctx, 20, 1);
-			static nk_bool *breakpoints = NULL;
 			char text[64] = { 0 };
 			g_nk_ctx->style.selectable.text_normal_active = active_colour;
 			g_nk_ctx->style.selectable.text_hover_active = active_colour;
 			g_nk_ctx->style.selectable.text_hover = active_colour;
-			InstructionBlock *block = &g_disassembly.instruction_blocks[0];
-			if (breakpoints == NULL) {
-				breakpoints = malloc(block->length * sizeof(nk_bool));
-				memset(breakpoints, 0, block->length);
-			}
-			static uint16_t prev_pc = 0;
-			for (int i = 0; i < block->length; ++i) {
-				DisassembledInstruction *instruction = &block->instructions[i];
-				snprintf(text, sizeof(text), "0x%08hx  %s", instruction->address,
+
+			size_t skipped = 0;
+			bool blanked = false;
+			// printf("0x%zx\n", g_disassembly.abook_length + PROG_BASE);
+			for (uint16_t ip = 0; ip < g_disassembly.abook_length; ++ip) {
+				AddressLookup *lookup = &g_disassembly.addressbook[ip];
+				if (lookup->type != ADDR_INSTRUCTION) {
+					skipped++;
+					continue;
+				}
+
+				if (skipped > 1 && !blanked) {
+					blanked = true;
+					nk_labelf(g_nk_ctx, NK_TEXT_LEFT,
+						  "===== 0x%03zx BYTES OF DATA =====",
+						  skipped - 1); // Ignore INST_HALF
+				}
+
+				blanked = false;
+				skipped = 0;
+
+				DisassembledInstruction *instruction =
+					&g_disassembly.instruction_blocks[lookup->block_offset]
+						 .instructions[lookup->array_offset];
+
+				static nk_bool selected = false;
+				static uint16_t prev_pc = 0;
+				snprintf(text, sizeof(text), "0x%08hx  %s",
+					 instruction->address + g_disassembly.base,
 					 instruction->asm_str);
 				struct nk_color colour =
 					g_nk_ctx->style.selectable.normal.data.color;
-				if (emulator->pc == instruction->address) {
+				if (emulator->pc == instruction->address + g_disassembly.base) {
 					struct nk_color pc_colour = { 0x50, 0x50, 0x55, 0xFF };
 					g_nk_ctx->style.selectable.normal.data.color = pc_colour;
 					if (emulator->pc != prev_pc) {
@@ -533,9 +550,8 @@ void render(EmulatorState *emulator) {
 						prev_pc = emulator->pc;
 					}
 				}
-				if (nk_selectable_label(g_nk_ctx, text, NK_TEXT_LEFT,
-							breakpoints + i)) {
-					printf("Breakpoint set on line %d!\n", i);
+				if (nk_selectable_label(g_nk_ctx, text, NK_TEXT_LEFT, &selected)) {
+					printf("Breakpoint!\n");
 					fflush(stdout);
 				}
 				g_nk_ctx->style.selectable.normal.data.color = colour;

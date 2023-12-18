@@ -1,6 +1,7 @@
 #include "disassembler.h"
 #include "instructions.h"
 
+#include <assert.h>
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -80,10 +81,10 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 	}
 
 	size_t *queue = NULL;
-	set_val *processed = NULL;
 	arrput(queue, 0); // Entry point
 
 	disassembly.addressbook = malloc(sizeof(AddressLookup) * length);
+	memset(disassembly.addressbook, 0, sizeof(AddressLookup) * length);
 
 	// First pass to discover instructions using standard recursive descent
 	while (arrlen(queue)) {
@@ -93,7 +94,6 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 		InstructionBlock block = { 0 };
 
 		while (ip < length) {
-			hmputs(processed, (set_val){ ip });
 			Chip8Instruction instruction = bytes2inst(code + ip);
 			DisassembledInstruction disasm = {
 				.instruction = instruction,
@@ -101,34 +101,39 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 				.address = ip,
 			};
 
-			AddressLookup lookup = { .block_offset = disassembly.iblock_length,
-						 .array_offset = block.length,
-						 .type = ADDR_INSTRUCTION };
+			AddressLookup *lookup = &disassembly.addressbook[disasm.address];
+			lookup->block_offset = disassembly.iblock_length;
+			lookup->array_offset = block.length;
+			lookup->type = ADDR_INSTRUCTION;
+			disassembly.abook_length++;
 
-			disassembly.addressbook[disasm.address] = lookup;
+			// Account for second half of instruction
+			lookup++;
+			lookup->block_offset = disassembly.iblock_length;
+			lookup->array_offset = block.length++;
+			lookup->type = ADDR_INST_HALF;
+			disassembly.abook_length++;
 
 			arrput(block.instructions, disasm);
-			block.length++;
 
 			if (instruction.raw == 0x00EE) {
 				break;
 			}
 
-			if (instruction.aformat.opcode == 1) { // JMP addr
+			if (instruction.aformat.opcode == 0x1 // JMP addr
+			    || instruction.aformat.opcode == 0x2) { // CALL addr
 				uint16_t addr = instruction.aformat.addr - PROG_BASE;
-				if (!hmgets(processed, addr).key && addr != 0) {
+				if (disassembly.addressbook[addr].type == ADDR_UNKNOWN) {
 					arrput(queue, addr);
+					disassembly.addressbook[addr].type = ADDR_MARKED;
 				}
-				break;
+				if (instruction.aformat.opcode == 0x1) {
+					break;
+				}
 			} else if (instruction.aformat.opcode == 0xB) { // JMP V0, addr
 				// Unconditional jump that requires runtime info
 				// - can't disassemble unknown address
 				break;
-			} else if (instruction.aformat.opcode == 0x2) { // CALL addr
-				uint16_t addr = instruction.aformat.addr - PROG_BASE;
-				if (!hmgets(processed, addr).key && addr != 0) {
-					arrput(queue, addr);
-				}
 			}
 
 			ip += 2;
@@ -142,11 +147,11 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 
 	// Second pass to discover data blocks based on unparsed sections
 	size_t data_start = -1;
-	for (size_t ip = 2; ip < length; ip += 2) {
-		bool wasProcessed = hmgets(processed, ip).key;
-		if (!wasProcessed && data_start == -1) {
+	for (size_t ip = 0; ip <= length; ++ip) {
+		bool processed = disassembly.addressbook[ip].type != ADDR_UNKNOWN;
+		if (!processed && data_start == -1) {
 			data_start = ip;
-		} else if (wasProcessed && data_start != -1) {
+		} else if (processed && data_start != -1) {
 			size_t data_len = ip - data_start;
 			DataBlock block = {
 				.data = malloc(data_len),
@@ -156,10 +161,11 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 			memcpy(block.data, code + data_start, data_len);
 
 			for (size_t i = 0; i < data_len; ++i) {
-				AddressLookup lookup = { .block_offset = disassembly.iblock_length,
-							 .array_offset = i,
-							 .type = ADDR_DATA };
-				disassembly.addressbook[data_start + i] = lookup;
+				AddressLookup *lookup = &disassembly.addressbook[data_start + i];
+				lookup->block_offset = disassembly.dblock_length,
+				lookup->array_offset = i;
+				lookup->type = ADDR_DATA;
+				disassembly.abook_length++;
 			}
 
 			data_start = -1;
@@ -169,7 +175,7 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 		}
 	}
 
-	hmfree(processed);
+	assert(disassembly.abook_length == length);
 
 	return disassembly;
 }
@@ -199,6 +205,7 @@ Disassembly disassemble_linear(uint8_t *code, size_t length, size_t base) {
 					 .array_offset = block.length,
 					 .type = ADDR_INSTRUCTION };
 		disassembly.addressbook[disasm.address] = lookup;
+		disassembly.abook_length++;
 
 		arrput(block.instructions, disasm);
 		block.length++;

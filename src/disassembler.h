@@ -23,8 +23,11 @@ typedef struct InstructionBlock {
 } InstructionBlock;
 
 typedef enum AddressType {
-	ADDR_INSTRUCTION,
+	ADDR_UNKNOWN = 0,
+	ADDR_MARKED, // Marked for processing - like unknown, but acknowledged
 	ADDR_DATA,
+	ADDR_INSTRUCTION,
+	ADDR_INST_HALF, // 2nd instruction byte - invalid by itself
 } AddressType;
 
 typedef struct AddressLookup {
@@ -35,6 +38,7 @@ typedef struct AddressLookup {
 
 typedef struct Disassembly {
 	AddressLookup *addressbook;
+	size_t abook_length;
 	InstructionBlock *instruction_blocks;
 	size_t iblock_length;
 	DataBlock *data_blocks;
