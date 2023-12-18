@@ -10,30 +10,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-uint8_t *read_rom(char *rom_path, size_t *out_size) {
-	FILE *rom = fopen(rom_path, "rb");
-
-	if (rom == NULL) {
-		fprintf(stderr, "Error opening ROM file\n");
-		exit(EXIT_FAILURE);
-	}
-
-	fseek(rom, 0, SEEK_END);
-	size_t file_size = ftell(rom);
-	rewind(rom);
-
-	file_size += file_size % 2; // align to 2 bytes
-
-	uint8_t *buffer;
-	buffer = malloc(file_size);
-	fread(buffer, sizeof(*buffer), file_size, rom);
-
-	fclose(rom);
-
-	*out_size = file_size;
-	return buffer;
-}
-
 void print_usage() {
 	printf("Usage: eo8 <command> <rom>\n\n");
 	printf("    <rom>                         Compiled CHIP-8 binary ROM\n\n");
@@ -66,6 +42,7 @@ int main(int argc, char *argv[]) {
 		char *dump = hexdump(buffer, buffer_size, 0);
 		printf("%s", dump);
 		free(dump);
+		free(buffer);
 	} else if (strcmp(argv[1], "disassemble") == 0) {
 		if (argc != 4) {
 			print_usage();
@@ -79,6 +56,7 @@ int main(int argc, char *argv[]) {
 			printf("%s\n", disasm_str);
 			free(disasm_str);
 			free_disassembly(&disassembly);
+			free(buffer);
 		} else if (strcmp(argv[2], "recursive") == 0) {
 			buffer = read_rom(argv[3], &buffer_size);
 			Disassembly disassembly = disassemble_rd(buffer, buffer_size, PROG_BASE);
@@ -86,6 +64,7 @@ int main(int argc, char *argv[]) {
 			printf("%s\n", disasm_str);
 			free(disasm_str);
 			free_disassembly(&disassembly);
+			free(buffer);
 		}
 	} else if (strcmp(argv[1], "decompile") == 0) {
 		if (argc != 3) {
@@ -138,15 +117,10 @@ int main(int argc, char *argv[]) {
 			}
 		}
 
-		buffer = read_rom(argv[rom_idx], &buffer_size);
-		emulate(buffer, buffer_size, debug);
+		emulate_file(argv[rom_idx], debug);
 	} else {
 		print_usage();
 		return EXIT_FAILURE;
-	}
-
-	if (buffer) {
-		free(buffer);
 	}
 
 	return EXIT_SUCCESS;

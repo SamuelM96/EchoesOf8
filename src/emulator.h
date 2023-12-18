@@ -1,10 +1,10 @@
 #ifndef EMULATOR_H
 #define EMULATOR_H
 
+#include "common.h"
 #include "instructions.h"
 
 #include <stdbool.h>
-#include <stdlib.h>
 #include <stdint.h>
 
 #include <SDL_scancode.h>
@@ -56,6 +56,7 @@ extern const char *CYCLES_PER_FRAME_STR[];
 
 typedef struct EmulatorState {
 	// ROM to be loaded into RAM and executed
+	char *rom_path;
 	uint8_t *rom;
 	size_t rom_size;
 
@@ -99,7 +100,12 @@ typedef struct EmulatorState {
 	CyclesPerFrameType cycles_per_frame;
 } EmulatorState;
 
-void emulate(uint8_t *rom, size_t rom_size, bool debug);
+void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path);
+static inline void emulate_file(char *rom_path, bool debug) {
+	size_t rom_size = 0;
+	uint8_t *rom = read_rom(rom_path, &rom_size);
+	emulate(rom, rom_size, debug, rom_path);
+}
 
 static void beeper_callback(void *, uint8_t *, int);
 void beeper_state(bool);

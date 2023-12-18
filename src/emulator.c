@@ -3,6 +3,7 @@
 #include "disassembler.h"
 #include "instructions.h"
 #include <SDL_rect.h>
+#include <sys/errno.h>
 
 #define NK_INCLUDE_STANDARD_BOOL
 #define NK_INCLUDE_FIXED_TYPES
@@ -36,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 // Addresses that have been modified and are executed need to be redisassembled
 bool g_memory_modifications[EMULATOR_MEMORY_SIZE] = { false };
@@ -47,6 +49,7 @@ bool g_debug = false;
 nk_bool g_breakpoints[EMULATOR_MEMORY_SIZE] = { false };
 bool g_breakpoint_hit = false;
 bool g_show_debug_ui = false;
+bool g_inside_text_input = false;
 
 const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
 const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
@@ -150,6 +153,7 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 
 	Chip8Instruction instruction = bytes2inst(&emulator->memory[addr]);
 
+	// TODO: Process modified instruction before breakpoint handling
 	bool modified = g_memory_modifications[addr];
 	if (modified || addr != prev_inst_addr && trace) {
 		AddressLookup *lookup = &g_disassembly.addressbook[addr - g_disassembly.base];
@@ -234,6 +238,7 @@ void dump_state(EmulatorState *emulator) {
 void reset_state(EmulatorState *emulator) {
 	free_disassembly(&g_disassembly);
 
+	char *rom_path = emulator->rom_path;
 	uint8_t *rom = emulator->rom;
 	size_t rom_size = emulator->rom_size;
 	size_t config = emulator->configuration;
@@ -241,6 +246,7 @@ void reset_state(EmulatorState *emulator) {
 
 	memset(emulator, 0, sizeof(*emulator));
 
+	emulator->rom_path = rom_path;
 	emulator->rom = rom;
 	emulator->rom_size = rom_size;
 	emulator->configuration = config;
@@ -277,9 +283,26 @@ void reset_state(EmulatorState *emulator) {
 				       EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE);
 }
 
-void load_rom(EmulatorState *emulator, uint8_t *rom, size_t rom_size) {
+void load_rom(EmulatorState *emulator, uint8_t *rom, size_t rom_size, char *rom_path) {
+	printf("[*] Loading ROM @ %s\n", rom_path);
+	if (emulator->rom) {
+		free(emulator->rom);
+	}
+	if (emulator->rom_path) {
+		free(emulator->rom_path);
+	}
+
+	if (rom_path) {
+		size_t path_len = strlen(rom_path);
+		emulator->rom_path = malloc(path_len);
+		memcpy(emulator->rom_path, rom_path, path_len);
+	} else {
+		emulator->rom_path = NULL;
+	}
+
 	emulator->rom = rom;
 	emulator->rom_size = rom_size;
+
 	reset_state(emulator);
 }
 
@@ -351,37 +374,39 @@ bool handle_input(EmulatorState *emulator) {
 	SDL_Event e;
 	nk_input_begin(g_nk_ctx);
 	while (SDL_PollEvent(&e)) {
-		switch (e.type) {
-		case SDL_QUIT:
+		if (e.type == SDL_QUIT ||
+		    e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
 			printf("Quitting...\n");
 			return false;
-		case SDL_KEYUP: {
-			update_keyboard_state(emulator, e.key.keysym.scancode, 0);
-			break;
 		}
-		case SDL_KEYDOWN: {
-			switch (e.key.keysym.scancode) {
-			case SDL_SCANCODE_ESCAPE:
-				printf("Quitting...\n");
-				return false;
-			case SDL_SCANCODE_SPACE:
-				g_debug = !g_debug;
-				printf("%s emulator\n", g_debug ? "Paused" : "Unpaused");
-				break;
-			case SDL_SCANCODE_H:
-				g_show_debug_ui = !g_show_debug_ui;
-				break;
-			case SDL_SCANCODE_N:
-				if (g_debug) {
-					debug_step(emulator);
-				}
-				break;
-			default:
-				update_keyboard_state(emulator, e.key.keysym.scancode, 1);
+
+		if (!g_inside_text_input) {
+			switch (e.type) {
+			case SDL_KEYUP: {
+				update_keyboard_state(emulator, e.key.keysym.scancode, 0);
 				break;
 			}
-			break;
-		}
+			case SDL_KEYDOWN: {
+				switch (e.key.keysym.scancode) {
+				case SDL_SCANCODE_SPACE:
+					g_debug = !g_debug;
+					printf("%s emulator\n", g_debug ? "Paused" : "Unpaused");
+					break;
+				case SDL_SCANCODE_H:
+					g_show_debug_ui = !g_show_debug_ui;
+					break;
+				case SDL_SCANCODE_N:
+					if (g_debug) {
+						debug_step(emulator);
+					}
+					break;
+				default:
+					update_keyboard_state(emulator, e.key.keysym.scancode, 1);
+					break;
+				}
+				break;
+			}
+			}
 		}
 		nk_sdl_handle_event(&e);
 	}
@@ -394,8 +419,6 @@ void render(EmulatorState *emulator) {
 	SDL_SetRenderDrawColor(g_renderer, 0x60, 0x65, 0x6A, 0xFF);
 	SDL_RenderClear(g_renderer);
 
-	// TODO: Audio controls
-	// TODO: Load ROMs at runtime
 	// TODO: Clean up handling of coordiantes and sizes
 	// TODO: Handle window resizing whilst maintaining aspect ratio of emulator display
 	// TODO: Scale and resize emulator display dynamically
@@ -511,11 +534,59 @@ void render(EmulatorState *emulator) {
 			if (nk_button_label(g_nk_ctx, "Step")) {
 				debug_step(emulator);
 			}
+
 			nk_layout_row_dynamic(g_nk_ctx, 5, 1);
 			nk_spacer(g_nk_ctx);
+
 			nk_layout_row_dynamic(g_nk_ctx, 30, 1);
 			if (nk_button_label(g_nk_ctx, "Reset")) {
 				reset_state(emulator);
+			}
+
+			nk_layout_row_dynamic(g_nk_ctx, 5, 1);
+			nk_spacer(g_nk_ctx);
+
+			nk_layout_row_dynamic(g_nk_ctx, 30, 1);
+			static char rom_path[256] = { 0 };
+			static bool invalid = false;
+			static char *error_message = "Invalid file path";
+			if (!*rom_path && emulator->rom_path) {
+				strncpy(rom_path, emulator->rom_path, sizeof(rom_path));
+			}
+
+			nk_flags flags = nk_edit_string_zero_terminated(
+				g_nk_ctx, NK_EDIT_SIMPLE, rom_path, sizeof(rom_path), NULL);
+
+			g_inside_text_input = (flags & 0x1) > 0;
+
+			if (nk_button_label(g_nk_ctx, "Load ROM")) {
+				if (*rom_path) {
+					if (access(rom_path, F_OK) != -1) {
+						size_t rom_size;
+						uint8_t *rom = read_rom(rom_path, &rom_size);
+						load_rom(emulator, rom, rom_size, rom_path);
+						invalid = false;
+					} else {
+						invalid = true;
+						if (errno == ENOENT) {
+							error_message = "File does not exist";
+						} else if (errno == EACCES) {
+							error_message = "File is not accessible";
+						} else {
+							error_message = "Error accessing file";
+						}
+					}
+				} else {
+					invalid = true;
+					error_message = "Please enter a file path";
+				}
+			}
+			if (invalid) {
+				struct nk_color colour = g_nk_ctx->style.text.color;
+				g_nk_ctx->style.text.color =
+					(struct nk_color){ 0xff, 0x50, 0x50, 0xff };
+				nk_label(g_nk_ctx, error_message, NK_TEXT_LEFT);
+				g_nk_ctx->style.text.color = colour;
 			}
 		}
 		nk_end(g_nk_ctx);
@@ -981,7 +1052,13 @@ void init_graphics() {
 	}
 }
 
-void emulate(uint8_t *rom, size_t rom_size, bool debug) {
+void free_emulator(EmulatorState *emulator) {
+	if (emulator->rom) {
+		free(emulator->rom);
+	}
+}
+
+void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 	printf("Emulating!\n");
 
 	EmulatorState emulator = { 0 };
@@ -990,7 +1067,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	emulator.cycles_per_frame = DEFAULT_CYCLES_PER_FRAME;
 
 	srand(time(NULL));
-	load_rom(&emulator, rom, rom_size);
+	load_rom(&emulator, rom, rom_size, rom_path);
 	init_graphics();
 
 	struct timespec start, current;
@@ -1050,4 +1127,5 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 	}
 
 	cleanup();
+	free_emulator(&emulator);
 }
