@@ -147,17 +147,24 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 
 	// Second pass to discover data blocks based on unparsed sections
 	size_t data_start = -1;
-	for (size_t ip = 0; ip <= length; ++ip) {
+	size_t data_len = 0;
+	for (size_t ip = 0; ip < length; ++ip) {
+		// Last byte not accounted for if it's standalone
 		bool processed = disassembly.addressbook[ip].type != ADDR_UNKNOWN;
-		if (!processed && data_start == -1) {
-			data_start = ip;
-		} else if (processed && data_start != -1) {
-			size_t data_len = ip - data_start;
+		if (!processed) {
+			if (data_start == -1) {
+				data_start = ip;
+			}
+			data_len++;
+		}
+
+		if ((ip + 1 == length || processed) && data_len > 0) {
 			DataBlock block = {
 				.data = malloc(data_len),
 				.length = data_len,
 				.address = data_start,
 			};
+			// TODO: Just reference original data?
 			memcpy(block.data, code + data_start, data_len);
 
 			for (size_t i = 0; i < data_len; ++i) {
@@ -169,12 +176,14 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 			}
 
 			data_start = -1;
+			data_len = 0;
 
 			arrput(disassembly.data_blocks, block);
 			disassembly.dblock_length++;
 		}
 	}
 
+	printf("Length: 0x%zx\nAddressbook: 0x%zx\n", length, disassembly.abook_length);
 	assert(disassembly.abook_length == length);
 
 	return disassembly;
