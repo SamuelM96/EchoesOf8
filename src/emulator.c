@@ -199,7 +199,7 @@ void dump_registers(EmulatorState *emulator) {
 
 void dump_stack(EmulatorState *emulator) {
 	fprintf(stderr, "\n===== STACK DUMP ====\n");
-	for (int i = 0; i < ARRAY_SIZE(emulator->stack); ++i) {
+	for (int i = 0; i < EMULATOR_STACK_SIZE; ++i) {
 		fprintf(stderr, "[%02hhd] = 0x%02hx", i, emulator->stack[i]);
 		if (i == emulator->sp) {
 			printf("  <-- SP");
@@ -452,7 +452,7 @@ void render(EmulatorState *emulator) {
 
 		if (nk_begin(g_nk_ctx, "Stack", nk_rect(0, 210, 250, 350), window_flags)) {
 			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
-			for (int i = 0; i < sizeof(emulator->stack); ++i) {
+			for (int i = 0; i < EMULATOR_STACK_SIZE; ++i) {
 				struct nk_color colour = g_nk_ctx->style.text.color;
 				if (emulator->sp == i) {
 					g_nk_ctx->style.text.color = active_colour;
@@ -486,7 +486,6 @@ void render(EmulatorState *emulator) {
 		nk_end(g_nk_ctx);
 
 		if (nk_begin(g_nk_ctx, "Debug", nk_rect(570, 560, 320, 240), window_flags)) {
-			// TODO: Breakpoints support
 			// TODO: Continue until panic or breakpoint
 			// TODO: Conditional breakpoints, e.g., break on all DRW
 			// instructions
@@ -527,9 +526,7 @@ void render(EmulatorState *emulator) {
 
 		if (nk_begin(g_nk_ctx, "Disassembly", nk_rect(890, 0, 390, 800),
 			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
-			// TODO: Track memory allocations to detect new instructions
 			// TODO: Replace with a list view-like setup. Nuklear groups?
-
 			struct nk_window *win = g_nk_ctx->current;
 			nk_layout_row_dynamic(g_nk_ctx, 20, 1);
 			char text[64] = { 0 };
@@ -977,7 +974,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 
 	EmulatorState emulator = { 0 };
 	emulator.configuration = CONFIG_CHIP8;
-	emulator.configuration ^= CONFIG_CHIP8_DISP_WAIT;
+	// emulator.configuration ^= CONFIG_CHIP8_DISP_WAIT;
 	emulator.cycles_per_frame = DEFAULT_CYCLES_PER_FRAME;
 
 	srand(time(NULL));

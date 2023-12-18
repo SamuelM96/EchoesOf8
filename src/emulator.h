@@ -10,6 +10,7 @@
 #include <SDL_scancode.h>
 
 #define EMULATOR_MEMORY_SIZE 4096
+#define EMULATOR_STACK_SIZE 16
 
 #define CONFIG_CHIP8_VF_RESET 0b1
 #define CONFIG_CHIP8_MEMORY 0b10
@@ -65,7 +66,7 @@ typedef struct EmulatorState {
 
 	// Stores return addresses
 	// Allows for 16 levels of nested subroutines
-	uint16_t stack[16];
+	uint16_t stack[EMULATOR_STACK_SIZE];
 
 	// 0-F general purpose registers
 	uint8_t registers[16];
