@@ -2,8 +2,6 @@
 #include "common.h"
 #include "disassembler.h"
 #include "instructions.h"
-#include <SDL_rect.h>
-#include <sys/errno.h>
 
 #define NK_INCLUDE_STANDARD_BOOL
 #define NK_INCLUDE_FIXED_TYPES
@@ -30,6 +28,7 @@
 #include <SDL_stdinc.h>
 #include <SDL_surface.h>
 #include <SDL_video.h>
+#include <SDL_rect.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -38,6 +37,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/errno.h>
 
 // Addresses that have been modified and are executed need to be redisassembled
 bool g_memory_modifications[EMULATOR_MEMORY_SIZE] = { false };
