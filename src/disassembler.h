@@ -22,11 +22,24 @@ typedef struct InstructionBlock {
 	size_t length;
 } InstructionBlock;
 
+typedef enum AddressType {
+	ADDR_INSTRUCTION,
+	ADDR_DATA,
+} AddressType;
+
+typedef struct AddressLookup {
+	size_t block_offset;
+	size_t array_offset;
+	AddressType type;
+} AddressLookup;
+
 typedef struct Disassembly {
+	AddressLookup *addressbook;
 	InstructionBlock *instruction_blocks;
 	size_t iblock_length;
 	DataBlock *data_blocks;
 	size_t dblock_length;
+	uint16_t base;
 
 } Disassembly;
 

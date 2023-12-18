@@ -72,6 +72,7 @@ char *hexdump(void *buffer, size_t length, size_t base) {
 // Recursive descent disassembler
 Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 	Disassembly disassembly = { 0 };
+	disassembly.base = base;
 
 	if (length % 2 != 0) {
 		fprintf(stderr, "Cannot disassemble code: not aligned to 2 bytes");
@@ -81,6 +82,8 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 	size_t *queue = NULL;
 	set_val *processed = NULL;
 	arrput(queue, 0); // Entry point
+
+	disassembly.addressbook = malloc(sizeof(AddressLookup) * length);
 
 	// First pass to discover instructions using standard recursive descent
 	while (arrlen(queue)) {
@@ -95,8 +98,14 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 			DisassembledInstruction disasm = {
 				.instruction = instruction,
 				.asm_str = inst2str(instruction),
-				.address = base + ip,
+				.address = ip,
 			};
+
+			AddressLookup lookup = { .block_offset = disassembly.iblock_length,
+						 .array_offset = block.length,
+						 .type = ADDR_INSTRUCTION };
+
+			disassembly.addressbook[disasm.address] = lookup;
 
 			arrput(block.instructions, disasm);
 			block.length++;
@@ -145,6 +154,14 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 				.address = data_start,
 			};
 			memcpy(block.data, code + data_start, data_len);
+
+			for (size_t i = 0; i < data_len; ++i) {
+				AddressLookup lookup = { .block_offset = disassembly.iblock_length,
+							 .array_offset = i,
+							 .type = ADDR_DATA };
+				disassembly.addressbook[data_start + i] = lookup;
+			}
+
 			data_start = -1;
 
 			arrput(disassembly.data_blocks, block);
@@ -160,10 +177,13 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 // Linear sweep disassembler
 Disassembly disassemble_linear(uint8_t *code, size_t length, size_t base) {
 	Disassembly disassembly = { 0 };
+	disassembly.base = base;
 
 	if (length % 2 != 0 || length == 0) {
 		return disassembly;
 	}
+
+	disassembly.addressbook = malloc(sizeof(AddressLookup) * length);
 
 	InstructionBlock block = { 0 };
 
@@ -172,8 +192,14 @@ Disassembly disassemble_linear(uint8_t *code, size_t length, size_t base) {
 		DisassembledInstruction disasm = {
 			.asm_str = inst2str(instruction),
 			.instruction = instruction,
-			.address = base + ip,
+			.address = ip,
 		};
+
+		AddressLookup lookup = { .block_offset = disassembly.iblock_length,
+					 .array_offset = block.length,
+					 .type = ADDR_INSTRUCTION };
+		disassembly.addressbook[disasm.address] = lookup;
+
 		arrput(block.instructions, disasm);
 		block.length++;
 	}
@@ -185,6 +211,7 @@ Disassembly disassemble_linear(uint8_t *code, size_t length, size_t base) {
 }
 
 char *disassembly2str(Disassembly *disassembly) {
+	uint16_t base = disassembly->base;
 	size_t buffer_len = 1024;
 	size_t remainder = buffer_len;
 	char *buffer = malloc(buffer_len);
@@ -207,20 +234,20 @@ char *disassembly2str(Disassembly *disassembly) {
 
 	for (int j = 0; j < disassembly->iblock_length; ++j) {
 		InstructionBlock *block = &disassembly->instruction_blocks[j];
-		WRITE("===== BLOCK @ 0x%08hx =====\n", block->instructions[0].address);
+		WRITE("===== BLOCK @ 0x%08hx =====\n", block->instructions[0].address + base);
 
 		for (int i = 0; i < block->length; ++i) {
 			DisassembledInstruction *disasm = &block->instructions[i];
-			WRITE("0x%08hx  %04hx    %s\n", disasm->address, disasm->instruction.raw,
-			      disasm->asm_str);
+			WRITE("0x%08hx  %04hx    %s\n", disasm->address + base,
+			      disasm->instruction.raw, disasm->asm_str);
 		}
 		WRITE("\n");
 	}
 
 	for (int i = 0; i < disassembly->dblock_length; ++i) {
 		DataBlock *block = &disassembly->data_blocks[i];
-		WRITE("===== DATA @ 0x%08hx =====\n", block->address);
-		char *dump = hexdump(block->data, block->length, block->address);
+		WRITE("===== DATA @ 0x%08hx =====\n", block->address + base);
+		char *dump = hexdump(block->data, block->length, block->address + base);
 		WRITE("%s\n\n", dump);
 		free(dump);
 	}
@@ -246,5 +273,9 @@ void free_disassembly(Disassembly *disassembly) {
 			free(disassembly->data_blocks[i].data);
 		}
 		arrfree(disassembly->data_blocks);
+	}
+
+	if (disassembly->addressbook) {
+		free(disassembly->addressbook);
 	}
 }
