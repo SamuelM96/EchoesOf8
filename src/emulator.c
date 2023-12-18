@@ -36,6 +36,9 @@
 #include <string.h>
 #include <time.h>
 
+// Addresses that have been modified and are executed need to be redisassembled
+bool g_memory_modifications[EMULATOR_MEMORY_SIZE] = { false };
+
 Disassembly g_disassembly;
 char *g_latest_memory_dump = NULL;
 bool g_written_to_memory = false;
@@ -139,15 +142,32 @@ void handle_timers(EmulatorState *emulator) {
 
 Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 	static uint16_t prev_inst_addr = 0;
-	Chip8Instruction instruction = bytes2inst(&emulator->memory[emulator->pc]);
-	if (emulator->pc != prev_inst_addr && trace) {
-		char *asm_str = inst2str(instruction);
-		printf("%s\t", asm_str);
-		free(asm_str);
-		print_instruction_state(emulator, instruction);
-		printf("\n");
+	uint16_t addr = emulator->pc;
+
+	Chip8Instruction instruction = bytes2inst(&emulator->memory[addr]);
+
+	bool modified = g_memory_modifications[addr];
+	if (modified || addr != prev_inst_addr && trace) {
+		AddressLookup *lookup = &g_disassembly.addressbook[addr];
+		DisassembledInstruction *disasm =
+			&g_disassembly.instruction_blocks[lookup->block_offset]
+				 .instructions[lookup->array_offset];
+
+		if (modified) {
+			disasm->instruction = instruction;
+			free(disasm->asm_str);
+			disasm->asm_str = inst2str(instruction);
+			g_memory_modifications[addr] = false;
+		}
+
+		if (trace) {
+			printf("%s\t", disasm->asm_str);
+			print_instruction_state(emulator, disasm->instruction);
+			printf("\n");
+		}
 	}
-	prev_inst_addr = emulator->pc;
+
+	prev_inst_addr = addr;
 	emulator->pc += 2;
 
 	return instruction;
@@ -184,7 +204,7 @@ void refresh_dump(EmulatorState *emulator) {
 		if (g_latest_memory_dump) {
 			free(g_latest_memory_dump);
 		}
-		g_latest_memory_dump = hexdump(emulator->memory, sizeof(emulator->memory), 0);
+		g_latest_memory_dump = hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
 		g_written_to_memory = false;
 	}
 }
@@ -243,9 +263,9 @@ void reset_state(EmulatorState *emulator) {
 	memcpy(emulator->memory + PROG_BASE, emulator->rom, emulator->rom_size);
 
 	g_written_to_memory = false;
-	g_latest_memory_dump = hexdump(emulator->memory, sizeof(emulator->memory), 0);
+	g_latest_memory_dump = hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
 	g_disassembly = disassemble_rd(emulator->memory + PROG_BASE,
-				       sizeof(emulator->memory) - PROG_BASE, PROG_BASE);
+				       EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE);
 }
 
 void load_rom(EmulatorState *emulator, uint8_t *rom, size_t rom_size) {
@@ -510,7 +530,6 @@ void render(EmulatorState *emulator) {
 
 			size_t skipped = 0;
 			bool blanked = false;
-			// printf("0x%zx\n", g_disassembly.abook_length + PROG_BASE);
 			for (uint16_t ip = 0; ip < g_disassembly.abook_length; ++ip) {
 				AddressLookup *lookup = &g_disassembly.addressbook[ip];
 				if (lookup->type != ADDR_INSTRUCTION) {
@@ -613,7 +632,7 @@ void print_instruction_state(EmulatorState *emulator, Chip8Instruction instructi
 }
 
 bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
-	if (emulator->pc < 0 || emulator->pc > sizeof(emulator->memory)) {
+	if (emulator->pc < 0 || emulator->pc > EMULATOR_MEMORY_SIZE) {
 		fprintf(stderr, "[!] PC exceeds memory boundaries\n");
 		return false;
 	}
@@ -845,7 +864,9 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 	case CHIP8_LD_I_VX:
 		g_written_to_memory = true;
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
-			emulator->memory[emulator->vi + i] = emulator->registers[i];
+			uint16_t addr = emulator->vi + i;
+			emulator->memory[addr] = emulator->registers[i];
+			g_memory_modifications[addr] = true;
 		}
 		if (emulator->configuration & CONFIG_CHIP8_MEMORY) {
 			emulator->vi = instruction.iformat.reg + 1;

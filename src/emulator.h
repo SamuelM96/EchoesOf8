@@ -9,6 +9,8 @@
 
 #include <SDL_scancode.h>
 
+#define EMULATOR_MEMORY_SIZE 4096
+
 #define CONFIG_CHIP8_VF_RESET 0b1
 #define CONFIG_CHIP8_MEMORY 0b10
 #define CONFIG_CHIP8_DISP_WAIT 0b100
@@ -59,7 +61,7 @@ typedef struct EmulatorState {
 	// 0x000 - 0x1FF = Interpreter memory, not for programs
 	// Programs start at 0x200 (512)
 	// Some start at 0x600 (1536) (ETI 660 computer)
-	uint8_t memory[4096];
+	uint8_t memory[EMULATOR_MEMORY_SIZE];
 
 	// Stores return addresses
 	// Allows for 16 levels of nested subroutines
