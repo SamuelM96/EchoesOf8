@@ -411,7 +411,7 @@ void render(EmulatorState *emulator) {
 		SDL_SetWindowSize(g_window, SCREEN_WIDTH, 800);
 
 		struct nk_color active_colour = { 230, 150, 150, 255 };
-		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 210),
+		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 250),
 			     window_flags)) {
 			nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
 			nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
@@ -447,10 +447,22 @@ void render(EmulatorState *emulator) {
 				    sizeof(CYCLES_PER_FRAME) / sizeof(int), &selected_cpf, 20,
 				    nk_vec2(100, 225));
 			emulator->cycles_per_frame = selected_cpf;
+
+			nk_layout_row_dynamic(g_nk_ctx, 10, 1);
+			nk_spacer(g_nk_ctx);
+
+			nk_layout_row_dynamic(g_nk_ctx, 20, 1);
+			nk_label(g_nk_ctx, "Volume", NK_TEXT_LEFT);
+			static float volume = -1;
+			if (volume == -1) {
+				volume = (float)g_beeper_volume;
+			}
+			nk_slider_float(g_nk_ctx, 0, &volume, 1, 0.1);
+			g_beeper_volume = volume;
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Stack", nk_rect(0, 210, 250, 350), window_flags)) {
+		if (nk_begin(g_nk_ctx, "Stack", nk_rect(0, 250, 250, 310), window_flags)) {
 			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
 			for (int i = 0; i < EMULATOR_STACK_SIZE; ++i) {
 				struct nk_color colour = g_nk_ctx->style.text.color;
