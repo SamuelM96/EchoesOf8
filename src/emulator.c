@@ -4,6 +4,7 @@
 #include "instructions.h"
 #include <SDL_rect.h>
 
+#define NK_INCLUDE_STANDARD_BOOL
 #define NK_INCLUDE_FIXED_TYPES
 #define NK_INCLUDE_STANDARD_IO
 #define NK_INCLUDE_STANDARD_VARARGS
@@ -43,7 +44,10 @@ Disassembly g_disassembly;
 char *g_latest_memory_dump = NULL;
 bool g_written_to_memory = false;
 bool g_debug = false;
+nk_bool g_breakpoints[EMULATOR_MEMORY_SIZE] = { false };
+bool g_breakpoint_hit = false;
 bool g_show_debug_ui = false;
+
 const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
 const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
 
@@ -148,20 +152,25 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 
 	bool modified = g_memory_modifications[addr];
 	if (modified || addr != prev_inst_addr && trace) {
-		AddressLookup *lookup = &g_disassembly.addressbook[addr];
+		AddressLookup *lookup = &g_disassembly.addressbook[addr - g_disassembly.base];
 		DisassembledInstruction *disasm =
 			&g_disassembly.instruction_blocks[lookup->block_offset]
 				 .instructions[lookup->array_offset];
 
 		if (modified) {
 			disasm->instruction = instruction;
-			free(disasm->asm_str);
+			char *old_str = disasm->asm_str;
 			disasm->asm_str = inst2str(instruction);
+
+			printf("Modified instruction @ 0x%03hx:\n\t%s\n\t%s\n", addr, old_str,
+			       disasm->asm_str);
+
 			g_memory_modifications[addr] = false;
+			free(old_str);
 		}
 
 		if (trace) {
-			printf("%s\t", disasm->asm_str);
+			printf("%s", disasm->asm_str);
 			print_instruction_state(emulator, disasm->instruction);
 			printf("\n");
 		}
@@ -230,7 +239,7 @@ void reset_state(EmulatorState *emulator) {
 	size_t config = emulator->configuration;
 	size_t cycles_per_frame = emulator->cycles_per_frame;
 
-	memset(emulator, 0, sizeof(EmulatorState));
+	memset(emulator, 0, sizeof(*emulator));
 
 	emulator->rom = rom;
 	emulator->rom_size = rom_size;
@@ -551,16 +560,18 @@ void render(EmulatorState *emulator) {
 					&g_disassembly.instruction_blocks[lookup->block_offset]
 						 .instructions[lookup->array_offset];
 
-				static nk_bool selected = false;
 				static uint16_t prev_pc = 0;
 				snprintf(text, sizeof(text), "0x%08hx  %s",
 					 instruction->address + g_disassembly.base,
 					 instruction->asm_str);
+
+				// Highlight instructions with breakpoints
 				struct nk_color colour =
 					g_nk_ctx->style.selectable.normal.data.color;
 				if (emulator->pc == instruction->address + g_disassembly.base) {
 					struct nk_color pc_colour = { 0x50, 0x50, 0x55, 0xFF };
 					g_nk_ctx->style.selectable.normal.data.color = pc_colour;
+
 					if (emulator->pc != prev_pc) {
 						long target =
 							(int)win->layout->at_y - SCREEN_HEIGHT / 2;
@@ -569,8 +580,12 @@ void render(EmulatorState *emulator) {
 						prev_pc = emulator->pc;
 					}
 				}
-				if (nk_selectable_label(g_nk_ctx, text, NK_TEXT_LEFT, &selected)) {
-					printf("Breakpoint!\n");
+
+				uint16_t addr = g_disassembly.base + ip;
+				if (nk_selectable_label(g_nk_ctx, text, NK_TEXT_LEFT,
+							g_breakpoints + addr)) {
+					printf("Breakpoint %s @ 0x%hx!\n",
+					       g_breakpoints[addr] ? "enabled" : "disabled", addr);
 					fflush(stdout);
 				}
 				g_nk_ctx->style.selectable.normal.data.color = colour;
@@ -987,6 +1002,15 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 		if (!g_debug) {
 			for (int cycle = 0; cycle < CYCLES_PER_FRAME[emulator.cycles_per_frame];
 			     ++cycle) {
+				if (g_breakpoints[emulator.pc] && !g_breakpoint_hit) {
+					g_breakpoint_hit = true;
+					g_debug = true;
+					printf("Hit breakpoint @ 0x%03hx\n", emulator.pc);
+					break;
+				}
+
+				g_breakpoint_hit = false;
+
 				Chip8Instruction instruction = fetch_next(&emulator, false);
 				if (!execute(&emulator, instruction)) {
 					dump_state(&emulator);
@@ -1002,7 +1026,9 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug) {
 				}
 			}
 
-			handle_timers(&emulator);
+			if (!g_breakpoint_hit) {
+				handle_timers(&emulator);
+			}
 		}
 
 		render(&emulator);
