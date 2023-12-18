@@ -160,12 +160,10 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 
 		if ((ip + 1 == length || processed) && data_len > 0) {
 			DataBlock block = {
-				.data = malloc(data_len),
+				.data = code + data_start,
 				.length = data_len,
 				.address = data_start,
 			};
-			// TODO: Just reference original data?
-			memcpy(block.data, code + data_start, data_len);
 
 			for (size_t i = 0; i < data_len; ++i) {
 				AddressLookup *lookup = &disassembly.addressbook[data_start + i];
