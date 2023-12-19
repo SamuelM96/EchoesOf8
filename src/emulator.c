@@ -87,6 +87,24 @@ bool g_beeper_in_attack = false;
 bool g_beeper_in_release = false;
 bool g_beeper_on = false;
 
+static void beeper_callback(void *, uint8_t *, int);
+void beeper_state(bool);
+static void beeper_callback(void *, uint8_t *, int);
+void handle_timers(EmulatorState *);
+Chip8Instruction fetch_next(EmulatorState *, bool);
+void dump_registers(EmulatorState *);
+void dump_stack(EmulatorState *);
+static inline void dump_memory(EmulatorState *);
+void dump_state(EmulatorState *);
+void reset_state(EmulatorState *);
+void init_graphics();
+void update_keyboard_state(EmulatorState *, SDL_Scancode, uint8_t);
+bool handle_input(EmulatorState *);
+void render(EmulatorState *);
+void cleanup();
+void print_instruction_state(EmulatorState *, Chip8Instruction);
+bool execute(EmulatorState *, Chip8Instruction);
+
 // Sawtooth beeper
 static void beeper_callback(void *userdata, uint8_t *_stream, int _len) {
 	const double attack_release_time = 0.005;

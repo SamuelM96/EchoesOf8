@@ -2,7 +2,6 @@
 #define EMULATOR_H
 
 #include "common.h"
-#include "instructions.h"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -106,23 +105,5 @@ static inline void emulate_file(char *rom_path, bool debug) {
 	uint8_t *rom = read_rom(rom_path, &rom_size);
 	emulate(rom, rom_size, debug, rom_path);
 }
-
-static void beeper_callback(void *, uint8_t *, int);
-void beeper_state(bool);
-static void beeper_callback(void *, uint8_t *, int);
-void handle_timers(EmulatorState *);
-Chip8Instruction fetch_next(EmulatorState *, bool);
-void dump_registers(EmulatorState *);
-void dump_stack(EmulatorState *);
-static inline void dump_memory(EmulatorState *);
-void dump_state(EmulatorState *);
-void reset_state(EmulatorState *);
-void init_graphics();
-void update_keyboard_state(EmulatorState *, SDL_Scancode, uint8_t);
-bool handle_input(EmulatorState *);
-void render(EmulatorState *);
-void cleanup();
-void print_instruction_state(EmulatorState *, Chip8Instruction);
-bool execute(EmulatorState *, Chip8Instruction);
 
 #endif // !EMULATOR_H
