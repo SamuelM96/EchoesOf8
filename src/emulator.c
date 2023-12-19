@@ -424,10 +424,15 @@ bool handle_input(EmulatorState *emulator) {
 }
 
 void render(EmulatorState *emulator) {
-	SDL_SetRenderDrawColor(g_renderer, 0x60, 0x65, 0x6A, 0xFF);
+	SDL_SetRenderDrawColor(g_renderer, 0x00, 0x05, 0x00, 0xFF);
 	SDL_RenderClear(g_renderer);
 
-	// TODO: Clean up handling of coordiantes and sizes
+	const int emu_scale = 10;
+	const int emu_width = TARGET_WIDTH * emu_scale;
+	const int emu_height = TARGET_HEIGHT * emu_scale;
+	int emu_x = 0;
+	int emu_y = 0;
+
 	// TODO: Handle window resizing whilst maintaining aspect ratio of emulator display
 	// TODO: Scale and resize emulator display dynamically
 	// TODO: Change pixel colours
@@ -439,11 +444,35 @@ void render(EmulatorState *emulator) {
 	if (g_show_debug_ui) {
 		const int window_flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE |
 					 NK_WINDOW_NO_SCROLLBAR;
-		SDL_SetWindowSize(g_window, SCREEN_WIDTH, 800);
+		const int window_width = SCREEN_WIDTH;
+		const int window_height = 800;
+		SDL_SetWindowSize(g_window, window_width, window_height);
 
 		struct nk_color active_colour = { 230, 150, 150, 255 };
-		if (nk_begin(g_nk_ctx, "Emulator Configuration", nk_rect(0, 0, 250, 250),
-			     window_flags)) {
+		struct nk_color error_colour = { 255, 80, 80, 255 };
+		struct nk_color pc_colour = { 80, 80, 85, 255 };
+
+		// Bounding boxes
+		struct nk_rect emu_config_rect = nk_rect(0, 0, 250, 250);
+		struct nk_rect stack_rect =
+			nk_rect(0, emu_config_rect.y + emu_config_rect.h, emu_config_rect.w, 310);
+		struct nk_rect memory_rect = nk_rect(0, stack_rect.y + stack_rect.h, 630,
+						     window_height - stack_rect.y - stack_rect.h);
+		struct nk_rect registers_rect =
+			nk_rect(emu_config_rect.x + emu_config_rect.w, emu_config_rect.y, 650, 239);
+		struct nk_rect disasm_rect =
+			nk_rect(registers_rect.x + registers_rect.w, registers_rect.y,
+				window_width - registers_rect.x - registers_rect.w, window_height);
+		struct nk_rect debug_rect = nk_rect(memory_rect.x + memory_rect.w, memory_rect.y,
+						    disasm_rect.x - memory_rect.x - memory_rect.w,
+						    memory_rect.h);
+
+		emu_x = registers_rect.x + (registers_rect.w - emu_width) / 2;
+		emu_y = registers_rect.y + registers_rect.h;
+
+		int default_line_height = 30;
+
+		if (nk_begin(g_nk_ctx, "Emulator Configuration", emu_config_rect, window_flags)) {
 			nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
 			nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
 			nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFTING;
@@ -451,7 +480,7 @@ void render(EmulatorState *emulator) {
 			nk_bool jumping = emulator->configuration & CONFIG_CHIP8_JUMPING;
 			nk_bool memory = emulator->configuration & CONFIG_CHIP8_MEMORY;
 
-			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 2);
 			if (nk_checkbox_label(g_nk_ctx, "VF Reset", &vf_reset)) {
 				emulator->configuration ^= CONFIG_CHIP8_VF_RESET;
 			}
@@ -472,7 +501,7 @@ void render(EmulatorState *emulator) {
 			}
 
 			int selected_cpf = emulator->cycles_per_frame;
-			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 2);
 			nk_label(g_nk_ctx, "Cycles/frame", NK_TEXT_LEFT);
 			nk_combobox(g_nk_ctx, CYCLES_PER_FRAME_STR,
 				    sizeof(CYCLES_PER_FRAME) / sizeof(int), &selected_cpf, 20,
@@ -493,8 +522,8 @@ void render(EmulatorState *emulator) {
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Stack", nk_rect(0, 250, 250, 310), window_flags)) {
-			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+		if (nk_begin(g_nk_ctx, "Stack", stack_rect, window_flags)) {
+			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 2);
 			for (int i = 0; i < EMULATOR_STACK_SIZE; ++i) {
 				struct nk_color colour = g_nk_ctx->style.text.color;
 				if (emulator->sp == i) {
@@ -507,7 +536,7 @@ void render(EmulatorState *emulator) {
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 630, 240),
+		if (nk_begin(g_nk_ctx, "Memory", memory_rect,
 			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
 			// TODO: Scroll memory into view when it hits a breakpoint
 			// TODO: Jump to PC button
@@ -582,23 +611,23 @@ void render(EmulatorState *emulator) {
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Debug", nk_rect(630, 560, 260, 240), window_flags)) {
+		if (nk_begin(g_nk_ctx, "Debug", debug_rect, window_flags)) {
 			// TODO: Conditional breakpoints, e.g., break on all DRW
 			// instructions
 			// TODO: Step in and out of functions
 			// TODO: Separate out debugging logic and state
 			// TODO: Timeless debugging like rr
-			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
+			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 2);
 			if (nk_button_label(g_nk_ctx, g_debug ? "Resume" : "Pause")) {
 				g_debug = !g_debug;
 			}
 			if (nk_button_label(g_nk_ctx, "Step")) {
 				debug_step(emulator);
 			}
-			nk_layout_row_dynamic(g_nk_ctx, 30, 1);
+			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 1);
 			nk_checkbox_label(g_nk_ctx, "Ignore BPs", &g_skip_breakpoints);
 
-			nk_layout_row_dynamic(g_nk_ctx, 30, 1);
+			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 1);
 			if (nk_button_label(g_nk_ctx, "Reset")) {
 				reset_state(emulator);
 			}
@@ -606,7 +635,7 @@ void render(EmulatorState *emulator) {
 			nk_layout_row_dynamic(g_nk_ctx, 3, 1);
 			nk_spacer(g_nk_ctx);
 
-			nk_layout_row_dynamic(g_nk_ctx, 30, 1);
+			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 1);
 			static char rom_path[256] = { 0 };
 			static bool invalid = false;
 			static char *error_message = "Invalid file path";
@@ -643,31 +672,30 @@ void render(EmulatorState *emulator) {
 			}
 			if (invalid) {
 				struct nk_color colour = g_nk_ctx->style.text.color;
-				g_nk_ctx->style.text.color =
-					(struct nk_color){ 0xff, 0x50, 0x50, 0xff };
+				g_nk_ctx->style.text.color = error_colour;
 				nk_label(g_nk_ctx, error_message, NK_TEXT_LEFT);
 				g_nk_ctx->style.text.color = colour;
 			}
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Registers", nk_rect(250, 0, 650, 239), window_flags)) {
-			nk_layout_row_dynamic(g_nk_ctx, 30, 4);
+		if (nk_begin(g_nk_ctx, "Registers", registers_rect, window_flags)) {
+			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 4);
 			for (int i = 0; i < sizeof(emulator->registers); ++i) {
 				nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "V%X = 0x%02hx", i,
 					  emulator->registers[i]);
 			}
-			nk_layout_row_dynamic(g_nk_ctx, 30, 4);
+			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 4);
 			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "PC = 0x%04hx", emulator->pc);
 			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "VI = 0x%04hx", emulator->vi);
 			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "SP = 0x%02hx", emulator->sp);
-			nk_layout_row_dynamic(g_nk_ctx, 30, 4);
+			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 4);
 			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "ST = 0x%02hx", emulator->st);
 			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "DT = 0x%02hx", emulator->dt);
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Disassembly", nk_rect(890, 0, 390, 800),
+		if (nk_begin(g_nk_ctx, "Disassembly", disasm_rect,
 			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
 			// TODO: Replace with a list view-like setup. Nuklear groups?
 			struct nk_window *win = g_nk_ctx->current;
@@ -709,7 +737,6 @@ void render(EmulatorState *emulator) {
 				struct nk_color colour =
 					g_nk_ctx->style.selectable.normal.data.color;
 				if (emulator->pc == instruction->address + g_disassembly.base) {
-					struct nk_color pc_colour = { 0x50, 0x50, 0x55, 0xFF };
 					g_nk_ctx->style.selectable.normal.data.color = pc_colour;
 
 					if (emulator->pc != prev_pc) {
@@ -746,11 +773,6 @@ void render(EmulatorState *emulator) {
 	if (g_show_debug_ui) {
 		int window_w, window_h;
 		SDL_GetWindowSize(g_window, &window_w, &window_h);
-		const int emu_scale = 10;
-		const int emu_width = TARGET_WIDTH * emu_scale;
-		const int emu_height = TARGET_HEIGHT * emu_scale;
-		const int emu_x = window_w / 2 - (emu_width / 2) - 70;
-		const int emu_y = window_h / 2 - (emu_height / 2);
 		SDL_Rect display_rect = { emu_x, emu_y, emu_width, emu_height };
 		SDL_RenderCopy(g_renderer, g_texture, NULL, &display_rect);
 	} else {
