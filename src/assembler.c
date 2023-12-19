@@ -4,10 +4,10 @@
 #include "stb_ds.h"
 
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdbool.h>
 
 #define MAX_LINE_LENGTH 1024
 #define MAX_LABEL_LENGTH 256

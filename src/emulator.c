@@ -2,7 +2,6 @@
 #include "common.h"
 #include "disassembler.h"
 #include "instructions.h"
-#include <ctype.h>
 
 #define NK_INCLUDE_STANDARD_BOOL
 #define NK_INCLUDE_FIXED_TYPES
@@ -24,21 +23,22 @@
 #include <SDL_keyboard.h>
 #include <SDL_log.h>
 #include <SDL_pixels.h>
+#include <SDL_rect.h>
 #include <SDL_render.h>
 #include <SDL_scancode.h>
 #include <SDL_stdinc.h>
 #include <SDL_surface.h>
 #include <SDL_video.h>
-#include <SDL_rect.h>
 
+#include <ctype.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/errno.h>
 #include <time.h>
 #include <unistd.h>
-#include <sys/errno.h>
 
 // Addresses that have been modified and are executed need to be redisassembled
 bool g_memory_modifications[EMULATOR_MEMORY_SIZE] = { false };
@@ -433,7 +433,8 @@ void render(EmulatorState *emulator) {
 	int emu_x = 0;
 	int emu_y = 0;
 
-	// TODO: Handle window resizing whilst maintaining aspect ratio of emulator display
+	// TODO: Handle window resizing whilst maintaining aspect ratio of emulator
+	// display
 	// TODO: Scale and resize emulator display dynamically
 	// TODO: Change pixel colours
 	// TODO: Shows sprites in memory

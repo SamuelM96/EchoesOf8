@@ -15,13 +15,18 @@ void print_usage() {
 	printf("    <rom>                         Compiled CHIP-8 binary ROM\n\n");
 	printf("Commands:\n");
 	printf("    hexdump <rom>                 Outputs a hexdump of the ROM\n");
-	printf("    disassemble <method> <rom>    Disassembles the ROM using the selected method\n");
+	printf("    disassemble <method> <rom>    Disassembles the ROM using the "
+	       "selected method\n");
 	printf("                                    Methods:\n");
 	printf("                                      - linear       Linear sweep\n");
-	printf("                                      - recursive    Recursive descent\n");
-	printf("    decompile <rom>               Decompiles the ROM into readable source code\n");
-	printf("    assessmble <asm> <rom>        Assessmbles the given assembly code into a CHIP-8 ROM\n");
-	printf("    compile <source> <rom>        Compiles the given source code into a CHIP-8 ROM\n");
+	printf("                                      - recursive    Recursive "
+	       "descent\n");
+	printf("    decompile <rom>               Decompiles the ROM into readable "
+	       "source code\n");
+	printf("    assessmble <asm> <rom>        Assessmbles the given assembly "
+	       "code into a CHIP-8 ROM\n");
+	printf("    compile <source> <rom>        Compiles the given source code "
+	       "into a CHIP-8 ROM\n");
 	printf("    emulate <rom> [--debug]       Emulates the ROM\n");
 	printf("                                    --debug    Enables debug mode\n");
 }

@@ -3,10 +3,10 @@
 
 #include <assert.h>
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 #include <string.h>
 
 #include "common.h"
@@ -118,12 +118,13 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 
 			arrput(block.instructions, disasm);
 
+			// Instructions that effect control flow
+			// "Skipping" instructions can be parsed linearly due to their
+			// predictable behaviour.
 			if (instruction.raw == 0x00EE) {
 				break;
-			}
-
-			if (instruction.aformat.opcode == 0x1 // JMP addr
-			    || instruction.aformat.opcode == 0x2) { // CALL addr
+			} else if (instruction.aformat.opcode == 0x1 // JMP addr
+				   || instruction.aformat.opcode == 0x2) { // CALL addr
 				uint16_t addr = instruction.aformat.addr - PROG_BASE;
 				if (disassembly.addressbook[addr].type == ADDR_UNKNOWN) {
 					arrput(queue, addr);
@@ -151,7 +152,6 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 	size_t data_start = -1;
 	size_t data_len = 0;
 	for (size_t ip = 0; ip < length; ++ip) {
-		// Last byte not accounted for if it's standalone
 		bool processed = disassembly.addressbook[ip].type != ADDR_UNKNOWN;
 		if (!processed) {
 			if (data_start == -1) {
@@ -232,19 +232,19 @@ char *disassembly2str(Disassembly *disassembly) {
 	char *buffer = malloc(buffer_len);
 	char *ptr = buffer;
 
-#define WRITE(str, ...)                                                                \
-	do {                                                                           \
-		if (remainder < 64) {                                                  \
-			size_t offset = ptr - buffer;                                  \
-			size_t prev_len = buffer_len - remainder;                      \
-			buffer_len *= 1.5;                                             \
-			buffer = realloc(buffer, buffer_len);                          \
-			ptr = buffer + offset;                                         \
-			remainder = buffer_len - prev_len;                             \
-		}                                                                      \
+#define WRITE(str, ...) \
+	do { \
+		if (remainder < 64) { \
+			size_t offset = ptr - buffer; \
+			size_t prev_len = buffer_len - remainder; \
+			buffer_len *= 1.5; \
+			buffer = realloc(buffer, buffer_len); \
+			ptr = buffer + offset; \
+			remainder = buffer_len - prev_len; \
+		} \
 		size_t bytes_written = snprintf(ptr, remainder, (str), ##__VA_ARGS__); \
-		remainder -= bytes_written;                                            \
-		ptr += bytes_written;                                                  \
+		remainder -= bytes_written; \
+		ptr += bytes_written; \
 	} while (false)
 
 	for (int j = 0; j < disassembly->iblock_length; ++j) {
