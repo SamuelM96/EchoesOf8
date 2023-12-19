@@ -197,9 +197,12 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 		}
 
 		if (trace) {
-			printf("%s\t", disasm->asm_str);
+			printf("[0x%03hX] => (%04hX) %s\t", emulator->pc, disasm->instruction.raw,
+			       disasm->asm_str);
 			print_instruction_state(emulator, disasm->instruction);
 			printf("\n");
+			dump_state(emulator);
+			printf("\n\n");
 		}
 	}
 
@@ -227,11 +230,14 @@ void dump_registers(EmulatorState *emulator) {
 void dump_stack(EmulatorState *emulator) {
 	fprintf(stderr, "\n===== STACK DUMP ====\n");
 	for (int i = 0; i < EMULATOR_STACK_SIZE; ++i) {
-		fprintf(stderr, "[%02hhd] = 0x%02hx", i, emulator->stack[i]);
+		fprintf(stderr, "[%02hhd] = 0x%03hx  ", i, emulator->stack[i]);
 		if (i == emulator->sp) {
-			printf("  <-- SP");
+			printf("<-- SP  ");
 		}
-		printf("\n");
+
+		if ((i + 1) % 2 == 0) {
+			printf("\n");
+		}
 	}
 }
 
@@ -386,13 +392,6 @@ void update_keyboard_state(EmulatorState *emulator, SDL_Scancode scancode, uint8
 	}
 }
 
-void debug_step(EmulatorState *emulator) {
-	execute(emulator, fetch_next(emulator, true));
-	dump_registers(emulator);
-	dump_stack(emulator);
-	printf("\n");
-}
-
 bool handle_input(EmulatorState *emulator) {
 	SDL_Event e;
 	nk_input_begin(g_nk_ctx);
@@ -423,7 +422,7 @@ bool handle_input(EmulatorState *emulator) {
 					break;
 				case SDL_SCANCODE_N:
 					if (g_debug) {
-						debug_step(emulator);
+						execute(emulator, fetch_next(emulator, true));
 					}
 					break;
 				default:
@@ -641,7 +640,7 @@ void render(EmulatorState *emulator) {
 				g_debug = !g_debug;
 			}
 			if (nk_button_label(g_nk_ctx, "Step")) {
-				debug_step(emulator);
+				execute(emulator, fetch_next(emulator, true));
 			}
 			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 1);
 			nk_checkbox_label(g_nk_ctx, "Ignore BPs", &g_skip_breakpoints);
