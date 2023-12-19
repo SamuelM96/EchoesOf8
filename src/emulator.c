@@ -48,8 +48,11 @@ char *g_latest_memory_dump = NULL;
 bool g_written_to_memory = false;
 bool g_debug = false;
 bool g_skip_breakpoints = false;
-nk_bool g_breakpoints[EMULATOR_MEMORY_SIZE] = { false };
-bool g_breakpoint_hit = false;
+nk_bool g_instruction_breakpoints[EMULATOR_MEMORY_SIZE] = { false };
+nk_bool g_memory_breakpoints[EMULATOR_MEMORY_SIZE] = { false };
+// TODO: Tidy up breakpoint handling - event based?
+bool g_inst_breakpoint_hit = false;
+bool g_memory_breakpoint_hit = false;
 bool g_show_debug_ui = false;
 bool g_inside_text_input = false;
 
@@ -508,7 +511,6 @@ void render(EmulatorState *emulator) {
 			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
 			// TODO: Jump to PC button
 			// TODO: Jump to address from text field
-			static nk_bool selected_memory[EMULATOR_MEMORY_SIZE] = { 0 };
 			char byte_str[3] = { 0 };
 			char ascii[17] = { 0 };
 			int x = 0;
@@ -557,7 +559,7 @@ void render(EmulatorState *emulator) {
 				nk_layout_space_push(g_nk_ctx,
 						     nk_rect(x, y, byte_width, line_height));
 				nk_selectable_label(g_nk_ctx, byte_str, NK_TEXT_CENTERED,
-						    selected_memory + i);
+						    g_memory_breakpoints + i);
 
 				x += byte_width;
 
@@ -567,10 +569,10 @@ void render(EmulatorState *emulator) {
 						nk_layout_space_push(g_nk_ctx,
 								     nk_rect(x, y, char_width,
 									     line_height));
-						nk_selectable_text(g_nk_ctx, ascii + j, 1,
-								   NK_TEXT_ALIGN_MIDDLE |
-									   NK_TEXT_ALIGN_LEFT,
-								   selected_memory + i - 15 + j);
+						nk_selectable_text(
+							g_nk_ctx, ascii + j, 1,
+							NK_TEXT_ALIGN_MIDDLE | NK_TEXT_ALIGN_LEFT,
+							g_memory_breakpoints + i - 15 + j);
 						x += char_width;
 					}
 				}
@@ -720,9 +722,11 @@ void render(EmulatorState *emulator) {
 
 				uint16_t addr = g_disassembly.base + ip;
 				if (nk_selectable_label(g_nk_ctx, text, NK_TEXT_LEFT,
-							g_breakpoints + addr)) {
+							g_instruction_breakpoints + addr)) {
 					printf("Breakpoint %s @ 0x%hx!\n",
-					       g_breakpoints[addr] ? "enabled" : "disabled", addr);
+					       g_instruction_breakpoints[addr] ? "enabled" :
+										 "disabled",
+					       addr);
 					fflush(stdout);
 				}
 				g_nk_ctx->style.selectable.normal.data.color = colour;
@@ -1019,6 +1023,10 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 			uint16_t addr = emulator->vi + i;
 			emulator->memory[addr] = emulator->registers[i];
 			g_memory_modifications[addr] = true;
+			if (g_memory_breakpoints[addr]) {
+				g_debug = true;
+				g_memory_breakpoint_hit = true;
+			}
 		}
 		if (emulator->configuration & CONFIG_CHIP8_MEMORY) {
 			emulator->vi = instruction.iformat.reg + 1;
@@ -1026,7 +1034,12 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 		break;
 	case CHIP8_LD_VX_I:
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
-			emulator->registers[i] = emulator->memory[emulator->vi + i];
+			uint16_t addr = emulator->vi + i;
+			emulator->registers[i] = emulator->memory[addr];
+			if (g_memory_breakpoints[addr]) {
+				g_debug = true;
+				g_memory_breakpoint_hit = true;
+			}
 		}
 		if (emulator->configuration & CONFIG_CHIP8_MEMORY) {
 			emulator->vi = instruction.iformat.reg + 1;
@@ -1144,20 +1157,26 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 	while (running) {
 		running = handle_input(&emulator);
 		clock_gettime(CLOCK_MONOTONIC, &start);
+
+		if (g_memory_breakpoint_hit) {
+			printf("Memory breakpoint hit!\n");
+			g_memory_breakpoint_hit = false;
+		}
+
 		if (!g_debug) {
 			for (int cycle = 0;
 			     cycle < CYCLES_PER_FRAME[emulator.cycles_per_frame] && running;
 			     ++cycle) {
 				running = handle_input(&emulator);
-				if (!g_skip_breakpoints && g_breakpoints[emulator.pc] &&
-				    !g_breakpoint_hit) {
-					g_breakpoint_hit = true;
+				if (!g_skip_breakpoints && g_instruction_breakpoints[emulator.pc] &&
+				    !g_inst_breakpoint_hit) {
+					g_inst_breakpoint_hit = true;
 					g_debug = true;
 					printf("Hit breakpoint @ 0x%03hx\n", emulator.pc);
 					break;
 				}
 
-				g_breakpoint_hit = false;
+				g_inst_breakpoint_hit = false;
 
 				Chip8Instruction instruction = fetch_next(&emulator, false);
 				if (!execute(&emulator, instruction)) {
@@ -1169,12 +1188,12 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 					printf("%s\n", asm_str);
 					free(asm_str);
 				}
-				if (emulator.display_interrupted) {
+				if (emulator.display_interrupted || g_memory_breakpoint_hit) {
 					break;
 				}
 			}
 
-			if (!g_breakpoint_hit) {
+			if (!g_inst_breakpoint_hit) {
 				handle_timers(&emulator);
 			}
 		}
