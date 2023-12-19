@@ -13,6 +13,8 @@
 
 #include "stb_ds.h"
 
+// TODO: Use a nice dynamic string builder implementation rather than this
+// handcrafted mess
 char *hexdump(void *buffer, size_t length, size_t base) {
 	const char header[] = "Offset    0 1  2 3  4 5  6 7  8 9  A B  C D  E F";
 	const int header_len = sizeof(header);

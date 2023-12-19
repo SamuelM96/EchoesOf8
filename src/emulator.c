@@ -2,6 +2,7 @@
 #include "common.h"
 #include "disassembler.h"
 #include "instructions.h"
+#include <ctype.h>
 
 #define NK_INCLUDE_STANDARD_BOOL
 #define NK_INCLUDE_FIXED_TYPES
@@ -503,51 +504,103 @@ void render(EmulatorState *emulator) {
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 570, 240),
+		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 630, 240),
 			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
 			// TODO: Jump to PC button
 			// TODO: Jump to address from text field
-			nk_layout_row_dynamic(g_nk_ctx, 15, 1);
-			refresh_dump(emulator);
-			char *dump_ptr = g_latest_memory_dump;
-			while (true) {
-				char *temp = dump_ptr;
-				while (*temp != '\n' && *temp != '\0')
-					++temp;
+			static nk_bool selected_memory[EMULATOR_MEMORY_SIZE] = { 0 };
+			char byte_str[3] = { 0 };
+			char ascii[17] = { 0 };
+			int x = 0;
+			int y = 10;
+			int char_width = 11;
+			int byte_width = 23;
+			int addr_width = 50;
+			int ascii_width = 130;
+			int line_height = 30;
+			char header_offsets[] = "0123456789ABCDEF";
 
-				nk_text(g_nk_ctx, dump_ptr, temp - dump_ptr, NK_TEXT_LEFT);
-
-				if (*temp == '\0')
-					break;
-				dump_ptr = temp + 1;
+			// Header
+			nk_layout_space_begin(g_nk_ctx, NK_STATIC, 0, 18);
+			nk_layout_space_push(g_nk_ctx, nk_rect(x, y, addr_width, line_height));
+			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "Addr");
+			x += addr_width;
+			for (int i = 0; i < 16; ++i) {
+				nk_layout_space_push(g_nk_ctx,
+						     nk_rect(x, y, byte_width, line_height));
+				nk_text(g_nk_ctx, header_offsets + i, 1, NK_TEXT_CENTERED);
+				x += byte_width;
 			}
+			x += 10;
+			nk_layout_space_push(g_nk_ctx, nk_rect(x, y, 50, line_height));
+			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "ASCII");
+
+			// Hexdump
+			nk_layout_space_begin(g_nk_ctx, NK_STATIC, 0, 33);
+			for (uint16_t i = 0; i < EMULATOR_MEMORY_SIZE; ++i) {
+				char byte = ((char *)emulator->memory)[i];
+				if (isprint(byte)) {
+					ascii[i % 16] = byte;
+				} else {
+					ascii[i % 16] = '.';
+				}
+
+				if (i % 16 == 0) {
+					x = 0;
+					nk_layout_space_push(g_nk_ctx, nk_rect(x, y, addr_width,
+									       line_height));
+					nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "0x%03hx", i);
+					x += addr_width;
+				}
+
+				snprintf(byte_str, sizeof(byte_str), "%02hx", byte);
+				nk_layout_space_push(g_nk_ctx,
+						     nk_rect(x, y, byte_width, line_height));
+				nk_selectable_label(g_nk_ctx, byte_str, NK_TEXT_CENTERED,
+						    selected_memory + i);
+
+				x += byte_width;
+
+				if ((i + 1) % 16 == 0) {
+					x += 10;
+					for (int j = 0; j < sizeof(ascii) - 1; ++j) {
+						nk_layout_space_push(g_nk_ctx,
+								     nk_rect(x, y, char_width,
+									     line_height));
+						nk_selectable_text(g_nk_ctx, ascii + j, 1,
+								   NK_TEXT_ALIGN_MIDDLE |
+									   NK_TEXT_ALIGN_LEFT,
+								   selected_memory + i - 15 + j);
+						x += char_width;
+					}
+				}
+			}
+			nk_layout_space_end(g_nk_ctx);
 		}
 		nk_end(g_nk_ctx);
 
-		if (nk_begin(g_nk_ctx, "Debug", nk_rect(570, 560, 320, 240), window_flags)) {
+		if (nk_begin(g_nk_ctx, "Debug", nk_rect(630, 560, 260, 240), window_flags)) {
 			// TODO: Conditional breakpoints, e.g., break on all DRW
 			// instructions
 			// TODO: Step in and out of functions
 			// TODO: Separate out debugging logic and state
 			// TODO: Timeless debugging like rr
-			nk_layout_row_dynamic(g_nk_ctx, 30, 3);
+			nk_layout_row_dynamic(g_nk_ctx, 30, 2);
 			if (nk_button_label(g_nk_ctx, g_debug ? "Resume" : "Pause")) {
 				g_debug = !g_debug;
 			}
 			if (nk_button_label(g_nk_ctx, "Step")) {
 				debug_step(emulator);
 			}
+			nk_layout_row_dynamic(g_nk_ctx, 30, 1);
 			nk_checkbox_label(g_nk_ctx, "Ignore BPs", &g_skip_breakpoints);
-
-			nk_layout_row_dynamic(g_nk_ctx, 5, 1);
-			nk_spacer(g_nk_ctx);
 
 			nk_layout_row_dynamic(g_nk_ctx, 30, 1);
 			if (nk_button_label(g_nk_ctx, "Reset")) {
 				reset_state(emulator);
 			}
 
-			nk_layout_row_dynamic(g_nk_ctx, 5, 1);
+			nk_layout_row_dynamic(g_nk_ctx, 3, 1);
 			nk_spacer(g_nk_ctx);
 
 			nk_layout_row_dynamic(g_nk_ctx, 30, 1);
