@@ -197,7 +197,7 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 		}
 
 		if (trace) {
-			printf("%s", disasm->asm_str);
+			printf("%s\t", disasm->asm_str);
 			print_instruction_state(emulator, disasm->instruction);
 			printf("\n");
 		}
