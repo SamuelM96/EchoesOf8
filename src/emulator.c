@@ -509,6 +509,7 @@ void render(EmulatorState *emulator) {
 
 		if (nk_begin(g_nk_ctx, "Memory", nk_rect(0, 560, 630, 240),
 			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
+			// TODO: Scroll memory into view when it hits a breakpoint
 			// TODO: Jump to PC button
 			// TODO: Jump to address from text field
 			char byte_str[3] = { 0 };
