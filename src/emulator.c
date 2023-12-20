@@ -1365,7 +1365,6 @@ void reset_state(EmulatorState *emulator) {
 		emulator->memory + PROG_BASE, EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE);
 
 	char *disasm_str = disassembly2str(&emulator->debug_state.disassembly);
-	printf("%s\n", disasm_str);
 	free(disasm_str);
 }
 

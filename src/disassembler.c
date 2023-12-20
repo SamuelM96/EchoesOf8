@@ -1,5 +1,8 @@
 #include "disassembler.h"
+#include "common.h"
 #include "instructions.h"
+
+#include "stb_ds.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -8,10 +11,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "common.h"
-
-#include "stb_ds.h"
 
 // TODO: Use a nice dynamic string builder implementation rather than this
 // handcrafted mess
