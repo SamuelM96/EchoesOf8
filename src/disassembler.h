@@ -2,6 +2,8 @@
 #define DISASSEMBLER_H
 
 #include "instructions.h"
+#include "sds.h"
+
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -47,11 +49,11 @@ typedef struct Disassembly {
 
 } Disassembly;
 
-char *hexdump(void *buffer, size_t length, size_t base);
+sds hexdump(void *buffer, size_t length, size_t base);
 Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base);
 Disassembly disassemble_linear(uint8_t *code, size_t length, size_t base);
 
-char *disassembly2str(Disassembly *disassembly);
+sds disassembly2str(Disassembly *disassembly);
 void free_disassembly(Disassembly *disassembly);
 
 #endif // !DISASSEMBLER_H

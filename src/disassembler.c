@@ -2,6 +2,7 @@
 #include "common.h"
 #include "instructions.h"
 
+#include "sds.h"
 #include "stb_ds.h"
 
 #include <assert.h>
@@ -12,23 +13,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-// TODO: Use a nice dynamic string builder implementation rather than this
-// handcrafted mess
-char *hexdump(void *buffer, size_t length, size_t base) {
-	const char header[] = "Offset    0 1  2 3  4 5  6 7  8 9  A B  C D  E F";
-	const int header_len = sizeof(header);
+sds hexdump(void *buffer, size_t length, size_t base) {
+	sds result = sdsnew("Offset    0 1  2 3  4 5  6 7  8 9  A B  C D  E F");
 
-	// 00000000: 0000 0000 0000 0000 0000 0000 0000 0000  ................\n
-	const int line_len = 68;
 	size_t lines = length / 16;
 	size_t whitespace_needed = 16 - (length % 16);
 	lines = whitespace_needed == 16 ? lines : lines + 1;
 
-	size_t result_len = lines * 68 + header_len; // null byte included from header
-	char *result = malloc(result_len);
-
-	memcpy(result, header, header_len);
-	char *result_ptr = result + header_len - 1;
 	char ascii[17] = { 0 };
 	for (size_t i = 0; i < length; ++i) {
 		char byte = ((char *)buffer)[i];
@@ -39,35 +30,29 @@ char *hexdump(void *buffer, size_t length, size_t base) {
 		}
 
 		if (i % 16 == 0) {
-			snprintf(result_ptr, 12, "\n%08zx: ", base + i);
-			result_ptr += 11;
+			result = sdscatprintf(result, "\n%08zx: ", base + i);
 		}
 
-		snprintf(result_ptr, 3, "%02hhx: ", byte);
-		result_ptr += 2;
+		result = sdscatprintf(result, "%02hhx", byte);
 
 		if ((i + 1) % 16 == 0) {
-			snprintf(result_ptr, sizeof(ascii) + 3, "  %s", ascii);
-			result_ptr += sizeof(ascii) + 1;
+			result = sdscatprintf(result, "  %s", ascii);
 		} else if ((i + 1) % 2 == 0) {
-			*result_ptr++ = ' ';
+			result = sdscat(result, " ");
 		}
 	}
 
 	if (whitespace_needed != 16) {
 		for (size_t i = 0; i < whitespace_needed; ++i) {
-			*result_ptr++ = ' ';
-			*result_ptr++ = ' ';
+			result = sdscat(result, "  ");
 			if ((i + 1) % 2 == 0) {
-				*result_ptr++ = ' ';
+				result = sdscat(result, " ");
 			}
 			ascii[15 - i] = ' ';
 		}
-		snprintf(result_ptr, sizeof(ascii) + 3, "  %s\n", ascii);
-		result_ptr += sizeof(ascii) + 1;
+		result = sdscatprintf(result, " %s\n", ascii);
 	}
 
-	result[result_len - 1] = '\0';
 	return result;
 }
 
@@ -250,51 +235,34 @@ Disassembly disassemble_linear(uint8_t *code, size_t length, size_t base) {
 	return disassembly;
 }
 
-char *disassembly2str(Disassembly *disassembly) {
+sds disassembly2str(Disassembly *disassembly) {
 	uint16_t base = disassembly->base;
-	size_t buffer_len = 1024;
-	size_t remainder = buffer_len;
-	char *buffer = malloc(buffer_len);
-	char *ptr = buffer;
-
-#define WRITE(str, ...) \
-	do { \
-		if (remainder < 64) { \
-			size_t offset = ptr - buffer; \
-			size_t prev_len = buffer_len - remainder; \
-			buffer_len *= 1.5; \
-			buffer = realloc(buffer, buffer_len); \
-			ptr = buffer + offset; \
-			remainder = buffer_len - prev_len; \
-		} \
-		size_t bytes_written = snprintf(ptr, remainder, (str), ##__VA_ARGS__); \
-		remainder -= bytes_written; \
-		ptr += bytes_written; \
-	} while (false)
+	sds buffer = sdsempty();
 
 	for (int j = 0; j < disassembly->iblock_length; ++j) {
 		InstructionBlock *block = &disassembly->instruction_blocks[j];
-		WRITE("===== BLOCK @ 0x%08hx =====\n", block->instructions[0].address + base);
+		buffer = sdscatprintf(buffer, "===== BLOCK @ 0x%08hx =====\n",
+				      block->instructions[0].address + base);
 
 		for (int i = 0; i < block->length; ++i) {
 			DisassembledInstruction *disasm = &block->instructions[i];
-			WRITE("0x%08hx  %04hx    %s\n", disasm->address + base,
-			      disasm->instruction.raw, disasm->asm_str);
+			buffer = sdscatprintf(buffer, "0x%08hx  %04hx    %s\n",
+					      disasm->address + base, disasm->instruction.raw,
+					      disasm->asm_str);
 		}
-		WRITE("\n");
+		buffer = sdscat(buffer, "\n");
 	}
 
 	for (int i = 0; i < disassembly->dblock_length; ++i) {
 		DataBlock *block = &disassembly->data_blocks[i];
-		WRITE("===== DATA @ 0x%08hx =====\n", block->address + base);
-		char *dump = hexdump(block->data, block->length, block->address + base);
-		WRITE("%s\n\n", dump);
-		free(dump);
+		buffer =
+			sdscatprintf(buffer, "===== DATA @ 0x%08hx =====\n", block->address + base);
+		sds dump = hexdump(block->data, block->length, block->address + base);
+		buffer = sdscatfmt(buffer, "%s\n\n", dump);
+		sdsfree(dump);
 	}
 
-#undef WRITE
-
-	return realloc(buffer, ptr - buffer);
+	return buffer;
 }
 
 void free_disassembly(Disassembly *disassembly) {

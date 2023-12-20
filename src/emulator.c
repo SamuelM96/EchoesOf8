@@ -2,6 +2,7 @@
 #include "common.h"
 #include "disassembler.h"
 #include "instructions.h"
+#include "sds.h"
 
 #define NK_INCLUDE_STANDARD_BOOL
 #define NK_INCLUDE_FIXED_TYPES
@@ -82,7 +83,7 @@ typedef enum CyclesPerFrameType {
 // TODO: Tidy up breakpoint handling - event based?
 typedef struct DebugState {
 	Disassembly disassembly;
-	char *latest_memory_dump;
+	sds latest_memory_dump;
 	bool memory_modifications[EMULATOR_MEMORY_SIZE];
 	bool instruction_breakpoints[EMULATOR_MEMORY_SIZE];
 	bool memory_breakpoints[EMULATOR_MEMORY_SIZE];
@@ -1302,7 +1303,7 @@ void refresh_dump(EmulatorState *emulator) {
 	DebugState *debug_state = &emulator->debug_state;
 	if (debug_state->written_to_memory || !debug_state->latest_memory_dump) {
 		if (debug_state->latest_memory_dump) {
-			free(debug_state->latest_memory_dump);
+			sdsfree(debug_state->latest_memory_dump);
 		}
 		debug_state->latest_memory_dump =
 			hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
@@ -1363,9 +1364,6 @@ void reset_state(EmulatorState *emulator) {
 		hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
 	emulator->debug_state.disassembly = disassemble_rd(
 		emulator->memory + PROG_BASE, EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE);
-
-	char *disasm_str = disassembly2str(&emulator->debug_state.disassembly);
-	free(disasm_str);
 }
 
 void free_emulator(EmulatorState *emulator) {

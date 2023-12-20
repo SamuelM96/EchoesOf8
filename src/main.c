@@ -2,6 +2,7 @@
 #include "common.h"
 #include "disassembler.h"
 #include "emulator.h"
+#include "sds.h"
 
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
@@ -44,9 +45,9 @@ int main(int argc, char *argv[]) {
 			return EXIT_FAILURE;
 		}
 		buffer = read_rom(argv[2], &buffer_size);
-		char *dump = hexdump(buffer, buffer_size, 0);
+		sds dump = hexdump(buffer, buffer_size, 0);
 		printf("%s", dump);
-		free(dump);
+		sdsfree(dump);
 		free(buffer);
 	} else if (strcmp(argv[1], "disassemble") == 0) {
 		if (argc != 4) {
@@ -57,17 +58,17 @@ int main(int argc, char *argv[]) {
 			buffer = read_rom(argv[3], &buffer_size);
 			Disassembly disassembly =
 				disassemble_linear(buffer, buffer_size, PROG_BASE);
-			char *disasm_str = disassembly2str(&disassembly);
+			sds disasm_str = disassembly2str(&disassembly);
 			printf("%s\n", disasm_str);
-			free(disasm_str);
+			sdsfree(disasm_str);
 			free_disassembly(&disassembly);
 			free(buffer);
 		} else if (strcmp(argv[2], "recursive") == 0) {
 			buffer = read_rom(argv[3], &buffer_size);
 			Disassembly disassembly = disassemble_rd(buffer, buffer_size, PROG_BASE);
-			char *disasm_str = disassembly2str(&disassembly);
+			sds disasm_str = disassembly2str(&disassembly);
 			printf("%s\n", disasm_str);
-			free(disasm_str);
+			sdsfree(disasm_str);
 			free_disassembly(&disassembly);
 			free(buffer);
 		}

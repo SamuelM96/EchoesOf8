@@ -5,12 +5,9 @@ project(eo8)
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-# if(APPLE)
-#     set(CMAKE_BUILD_RPATH /Library/Frameworks/)
-# endif()
-
 file(GLOB Eo8Sources src/*.c)
-add_executable(eo8  ${Eo8Sources})
+file(GLOB LibSources lib/*.c)
+add_executable(eo8  ${Eo8Sources} ${LibSources})
 
 find_package(SDL2 REQUIRED COMPONENTS SDL2)
 target_link_libraries(eo8 PRIVATE SDL2::SDL2 m)
