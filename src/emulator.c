@@ -104,7 +104,7 @@ typedef struct BeeperState {
 	bool in_attack;
 	bool in_release;
 	bool on;
-} BeeperState;
+} Beeper;
 
 typedef struct EmulatorState {
 	// ROM to be loaded into RAM and executed
@@ -151,6 +151,8 @@ typedef struct EmulatorState {
 
 	CyclesPerFrameType cycles_per_frame;
 
+	Beeper beeper;
+
 	DebugState debug_state;
 } EmulatorState;
 
@@ -174,11 +176,10 @@ SDL_Window *g_window = NULL;
 SDL_Renderer *g_renderer = NULL;
 SDL_Texture *g_texture = NULL;
 struct nk_context *g_ctx;
-BeeperState g_beeper = { 0 };
 
 static void beeper_callback(void *, uint8_t *, int);
-void beeper_state(bool);
-void free_graphics();
+void beeper_toggle(Beeper *, bool);
+void free_graphics(EmulatorState *);
 static inline void dump_memory(EmulatorState *);
 void dump_registers(EmulatorState *);
 void dump_stack(EmulatorState *);
@@ -188,8 +189,8 @@ Chip8Instruction fetch_next(EmulatorState *, bool);
 void free_emulator(EmulatorState *);
 bool handle_input(EmulatorState *);
 void handle_timers(EmulatorState *);
-void init_beeper(BeeperState *);
-void init_graphics();
+void init_beeper(Beeper *);
+void init_graphics(EmulatorState *);
 void load_rom(EmulatorState *, uint8_t *, size_t, char *);
 void print_instruction_state(EmulatorState *, Chip8Instruction);
 void refresh_dump(EmulatorState *);
@@ -206,7 +207,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 
 	srand(time(NULL));
 	load_rom(&emulator, rom, rom_size, rom_path);
-	init_graphics();
+	init_graphics(&emulator);
 
 	DebugState *debug_state = &emulator.debug_state;
 
@@ -279,7 +280,7 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 		} while (elapsed_time < frame_time);
 	}
 
-	free_graphics();
+	free_graphics(&emulator);
 	free_emulator(&emulator);
 }
 
@@ -606,10 +607,10 @@ void handle_timers(EmulatorState *emulator) {
 	if (emulator->st > 0) {
 		emulator->st--;
 		if (!emulator->debug_state.debug_mode) {
-			beeper_state(true);
+			beeper_toggle(&emulator->beeper, true);
 		}
 	} else {
-		beeper_state(false);
+		beeper_toggle(&emulator->beeper, false);
 	}
 }
 
@@ -817,10 +818,10 @@ void render(EmulatorState *emulator) {
 			nk_label(g_ctx, "Volume", NK_TEXT_LEFT);
 			static float volume = -1;
 			if (volume == -1) {
-				volume = (float)g_beeper.volume;
+				volume = (float)emulator->beeper.volume;
 			}
 			nk_slider_float(g_ctx, 0, &volume, 1, 0.1);
-			g_beeper.volume = volume;
+			emulator->beeper.volume = volume;
 		}
 		nk_end(g_ctx);
 
@@ -1088,52 +1089,54 @@ void render(EmulatorState *emulator) {
 }
 
 static void beeper_callback(void *userdata, uint8_t *_stream, int _len) {
-	// Sawtooth beeper
+	Beeper *beeper = (Beeper *)userdata;
+
 	const double attack_release_time = 0.005;
 
 	int16_t *stream = (int16_t *)_stream;
 	int len = _len / sizeof(int16_t);
 
-	double attack_release_delta = g_beeper.volume / (attack_release_time * g_beeper.spec.freq);
-	double phase_increment = 2.0 * g_beeper.frequency / g_beeper.spec.freq;
+	double attack_release_delta = beeper->volume / (attack_release_time * beeper->spec.freq);
+	double phase_increment = 2.0 * beeper->frequency / beeper->spec.freq;
 
 	for (int sample = 0; sample < len; ++sample) {
-		g_beeper.phase += phase_increment;
-		if (g_beeper.phase >= 1.0)
-			g_beeper.phase -= 2.0;
+		beeper->phase += phase_increment;
+		if (beeper->phase >= 1.0)
+			beeper->phase -= 2.0;
 
-		if (g_beeper.in_attack) {
-			g_beeper.current_volume += attack_release_delta;
-			if (g_beeper.current_volume >= g_beeper.volume) {
-				g_beeper.current_volume = g_beeper.volume;
-				g_beeper.in_attack = false;
+		if (beeper->in_attack) {
+			beeper->current_volume += attack_release_delta;
+			if (beeper->current_volume >= beeper->volume) {
+				beeper->current_volume = beeper->volume;
+				beeper->in_attack = false;
 			}
 		}
 
-		if (g_beeper.in_release) {
-			g_beeper.current_volume -= attack_release_delta;
-			if (g_beeper.current_volume <= 0.0) {
-				g_beeper.current_volume = 0.0;
-				g_beeper.in_release = false;
-				SDL_PauseAudioDevice(g_beeper.id, 1);
+		if (beeper->in_release) {
+			beeper->current_volume -= attack_release_delta;
+			if (beeper->current_volume <= 0.0) {
+				beeper->current_volume = 0.0;
+				beeper->in_release = false;
+				SDL_PauseAudioDevice(beeper->id, 1);
 			}
 		}
 
-		stream[sample] = g_beeper.phase * g_beeper.current_volume * INT16_MAX / 2.0;
+		// Sawtooth beeper
+		stream[sample] = beeper->phase * beeper->current_volume * INT16_MAX / 2.0;
 	}
 }
 
-void beeper_state(bool on) {
-	if (!g_beeper.on && on) {
-		g_beeper.on = true;
-		g_beeper.in_attack = true;
-		g_beeper.in_release = false;
-		g_beeper.current_volume = 0.0;
-		SDL_PauseAudioDevice(g_beeper.id, 0);
-	} else if (g_beeper.on && !on) {
-		g_beeper.on = false;
-		g_beeper.in_attack = false;
-		g_beeper.in_release = true;
+void beeper_toggle(Beeper *beeper, bool on) {
+	if (!beeper->on && on) {
+		beeper->on = true;
+		beeper->in_attack = true;
+		beeper->in_release = false;
+		beeper->current_volume = 0.0;
+		SDL_PauseAudioDevice(beeper->id, 0);
+	} else if (beeper->on && !on) {
+		beeper->on = false;
+		beeper->in_attack = false;
+		beeper->in_release = true;
 	}
 }
 
@@ -1160,7 +1163,7 @@ void load_rom(EmulatorState *emulator, uint8_t *rom, size_t rom_size, char *rom_
 	reset_state(emulator);
 }
 
-void init_graphics() {
+void init_graphics(EmulatorState *emulator) {
 	SDL_SetHint(SDL_HINT_VIDEO_HIGHDPI_DISABLED, "0");
 	if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) < 0) {
 		fprintf(stderr, "[!] SDL could not initialise! SDL error: %s\n", SDL_GetError());
@@ -1210,12 +1213,12 @@ void init_graphics() {
 				nk_style_set_font(g_ctx, &font->handle);
 			}
 
-			init_beeper(&g_beeper);
+			init_beeper(&emulator->beeper);
 		}
 	}
 }
 
-void init_beeper(BeeperState *beeper) {
+void init_beeper(Beeper *beeper) {
 	beeper->volume = 0.1;
 	beeper->current_volume = 0.0;
 	beeper->frequency = 261.63;
@@ -1230,6 +1233,7 @@ void init_beeper(BeeperState *beeper) {
 		.channels = 1,
 		.format = AUDIO_S16,
 		.callback = beeper_callback,
+		.userdata = beeper,
 	};
 
 	beeper->id = SDL_OpenAudioDevice(NULL, 0, &spec, &beeper->spec, 0);
@@ -1367,11 +1371,11 @@ void free_emulator(EmulatorState *emulator) {
 	}
 }
 
-void free_graphics() {
+void free_graphics(EmulatorState *emulator) {
 	nk_sdl_shutdown();
 	SDL_DestroyTexture(g_texture);
 	SDL_DestroyRenderer(g_renderer);
 	SDL_DestroyWindow(g_window);
-	SDL_CloseAudioDevice(g_beeper.id);
+	SDL_CloseAudioDevice(emulator->beeper.id);
 	SDL_Quit();
 }
