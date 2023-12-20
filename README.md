@@ -1,4 +1,4 @@
-# EchoesOf8 - A CHIP-8 Emulator
+# EchoesOf8 - A [CHIP-8](https://en.wikipedia.org/wiki/CHIP-8) Emulator
 
 ## Building
 
@@ -13,9 +13,16 @@ brew install SDL2
 
 # Build the project
 ./build.sh
+```
 
+## Usage
+
+```bash
 # Run the emulator
 ./build/eo8 <rom>
+
+# Debug mode
+./build/eo8 <rom> --debug
 ```
 
 > [!NOTE]
@@ -23,6 +30,17 @@ brew install SDL2
 > You can accept the warning by going to `Settings > Privacy & Security`,
 > scrolling down, and clicking `Allow` for the security warning.
 > When you re-run the executable, you'll be allowed to proceed.
+
+The left side of the keyboard has been allocated as the keypad for the CHIP-8,
+e.g., the following keys on a QWERTY layout:
+
+| 1 | 2 | 3 | 4 |
+|---|---|---|---|
+| Q | W | E | R |
+| A | S | D | F |
+| Z | X | C | V |
+
+There are various ROMs you can try in the `tests` folder.
 
 ## Acknowledgements
 
