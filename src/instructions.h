@@ -1,6 +1,7 @@
 #ifndef INSTRUCTIONS_H
 #define INSTRUCTIONS_H
 
+#include "sds.h"
 #include <stdint.h>
 
 // Standard instructions
@@ -81,7 +82,7 @@ static inline Chip8Instruction bytes2inst(uint8_t *bytes) {
 	return instruction;
 }
 
-char *inst2str(Chip8Instruction instruction);
+sds inst2str(Chip8Instruction instruction);
 void print_instruction(Chip8Instruction instruction, Chip8InstructionFormat format);
 Chip8InstructionType instruction_type(Chip8Instruction instruction);
 Chip8InstructionFormat instruction_format(Chip8InstructionType type);

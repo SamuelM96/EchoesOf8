@@ -270,7 +270,7 @@ void free_disassembly(Disassembly *disassembly) {
 		for (int i = 0; i < disassembly->iblock_length; ++i) {
 			InstructionBlock *block = &disassembly->instruction_blocks[i];
 			for (int j = 0; j < block->length; ++j) {
-				free(block->instructions[j].asm_str);
+				sdsfree(block->instructions[j].asm_str);
 			}
 		}
 		arrfree(disassembly->instruction_blocks);

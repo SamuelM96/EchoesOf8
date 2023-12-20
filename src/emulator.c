@@ -257,9 +257,9 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 					debug_state->debug_mode = true;
 					printf("\n[!] Something went wrong @ 0x%03hx: ",
 					       emulator.pc - 2);
-					char *asm_str = inst2str(instruction);
+					sds asm_str = inst2str(instruction);
 					printf("%s\n", asm_str);
-					free(asm_str);
+					sdsfree(asm_str);
 				}
 				if (emulator.display_interrupted ||
 				    debug_state->memory_breakpoint_hit) {
@@ -304,14 +304,14 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 
 		if (modified) {
 			disasm->instruction = instruction;
-			char *old_str = disasm->asm_str;
+			sds old_str = disasm->asm_str;
 			disasm->asm_str = inst2str(instruction);
 
-			printf("Modified instruction @ 0x%03hx:\n\t%s\n\t%s\n", addr, old_str,
-			       disasm->asm_str);
+			printf("Modified instruction @ 0x%03hx:\n  Old: %s\n  New: %s\n", addr,
+			       old_str, disasm->asm_str);
 
 			debug_state->memory_modifications[addr] = false;
-			free(old_str);
+			sdsfree(old_str);
 		}
 
 		if (trace) {

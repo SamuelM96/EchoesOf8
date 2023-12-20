@@ -14,7 +14,7 @@ typedef struct DataBlock {
 } DataBlock;
 
 typedef struct DisassembledInstruction {
-	char *asm_str;
+	sds asm_str;
 	Chip8Instruction instruction;
 	uint16_t address;
 } DisassembledInstruction;
