@@ -79,6 +79,33 @@ typedef enum CyclesPerFrameType {
 } CyclesPerFrameType;
 #define DEFAULT_CYCLES_PER_FRAME CPF_100
 
+// TODO: Tidy up breakpoint handling - event based?
+typedef struct DebugState {
+	Disassembly disassembly;
+	char *latest_memory_dump;
+	bool memory_modifications[EMULATOR_MEMORY_SIZE];
+	bool instruction_breakpoints[EMULATOR_MEMORY_SIZE];
+	bool memory_breakpoints[EMULATOR_MEMORY_SIZE];
+
+	bool debug_mode;
+	bool written_to_memory;
+	bool skip_breakpoints;
+	bool inst_breakpoint_hit;
+	bool memory_breakpoint_hit;
+} DebugState;
+
+typedef struct BeeperState {
+	SDL_AudioSpec spec;
+	SDL_AudioDeviceID id;
+	double volume;
+	double current_volume;
+	double frequency;
+	double phase;
+	bool in_attack;
+	bool in_release;
+	bool on;
+} BeeperState;
+
 typedef struct EmulatorState {
 	// ROM to be loaded into RAM and executed
 	char *rom_path;
@@ -123,34 +150,9 @@ typedef struct EmulatorState {
 	uint8_t configuration;
 
 	CyclesPerFrameType cycles_per_frame;
+
+	DebugState debug_state;
 } EmulatorState;
-
-typedef struct BeeperState {
-	SDL_AudioSpec spec;
-	SDL_AudioDeviceID id;
-	double volume;
-	double current_volume;
-	double frequency;
-	double phase;
-	bool in_attack;
-	bool in_release;
-	bool on;
-} BeeperState;
-
-// TODO: Tidy up breakpoint handling - event based?
-typedef struct DebugState {
-	Disassembly disassembly;
-	char *latest_memory_dump;
-	bool memory_modifications[EMULATOR_MEMORY_SIZE];
-	bool instruction_breakpoints[EMULATOR_MEMORY_SIZE];
-	bool memory_breakpoints[EMULATOR_MEMORY_SIZE];
-
-	bool debug_mode;
-	bool written_to_memory;
-	bool skip_breakpoints;
-	bool inst_breakpoint_hit;
-	bool memory_breakpoint_hit;
-} DebugState;
 
 const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
 const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
@@ -164,7 +166,6 @@ const char *CYCLES_PER_FRAME_STR[] = {
 	[CPF_200] = "200", [CPF_500] = "500", [CPF_1000] = "1000",
 };
 
-DebugState g_debug_state = { 0 };
 bool g_show_debug_ui = false;
 bool g_inside_text_input = false;
 
@@ -201,19 +202,20 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 
 	EmulatorState emulator = { 0 };
 	emulator.configuration = CONFIG_CHIP8;
-	// emulator.configuration ^= CONFIG_CHIP8_DISP_WAIT;
 	emulator.cycles_per_frame = DEFAULT_CYCLES_PER_FRAME;
 
 	srand(time(NULL));
 	load_rom(&emulator, rom, rom_size, rom_path);
 	init_graphics();
 
+	DebugState *debug_state = &emulator.debug_state;
+
 	struct timespec start, current;
 	long long frame_time = NANOSECONDS_PER_SECOND / TARGET_HZ;
 	long long elapsed_time;
 
 	if (debug) {
-		g_debug_state.debug_mode = true;
+		debug_state->debug_mode = true;
 		g_show_debug_ui = true;
 		printf("Debugging enabled!\n");
 		printf("  - <SPACE> to pause/unpause\n");
@@ -226,31 +228,31 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 		running = handle_input(&emulator);
 		clock_gettime(CLOCK_MONOTONIC, &start);
 
-		if (g_debug_state.memory_breakpoint_hit) {
+		if (debug_state->memory_breakpoint_hit) {
 			printf("Memory breakpoint hit!\n");
-			g_debug_state.memory_breakpoint_hit = false;
+			debug_state->memory_breakpoint_hit = false;
 		}
 
-		if (!g_debug_state.debug_mode) {
+		if (!debug_state->debug_mode) {
 			for (int cycle = 0;
 			     cycle < CYCLES_PER_FRAME[emulator.cycles_per_frame] && running;
 			     ++cycle) {
 				running = handle_input(&emulator);
-				if (!g_debug_state.skip_breakpoints &&
-				    g_debug_state.instruction_breakpoints[emulator.pc] &&
-				    !g_debug_state.inst_breakpoint_hit) {
-					g_debug_state.inst_breakpoint_hit = true;
-					g_debug_state.debug_mode = true;
+				if (!debug_state->skip_breakpoints &&
+				    debug_state->instruction_breakpoints[emulator.pc] &&
+				    !debug_state->inst_breakpoint_hit) {
+					debug_state->inst_breakpoint_hit = true;
+					debug_state->debug_mode = true;
 					printf("Hit breakpoint @ 0x%03hx\n", emulator.pc);
 					break;
 				}
 
-				g_debug_state.inst_breakpoint_hit = false;
+				debug_state->inst_breakpoint_hit = false;
 
 				Chip8Instruction instruction = fetch_next(&emulator, false);
 				if (!execute(&emulator, instruction)) {
 					dump_state(&emulator);
-					g_debug_state.debug_mode = true;
+					debug_state->debug_mode = true;
 					printf("\n[!] Something went wrong @ 0x%03hx: ",
 					       emulator.pc - 2);
 					char *asm_str = inst2str(instruction);
@@ -258,12 +260,12 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 					free(asm_str);
 				}
 				if (emulator.display_interrupted ||
-				    g_debug_state.memory_breakpoint_hit) {
+				    debug_state->memory_breakpoint_hit) {
 					break;
 				}
 			}
 
-			if (!g_debug_state.inst_breakpoint_hit) {
+			if (!debug_state->inst_breakpoint_hit) {
 				handle_timers(&emulator);
 			}
 		}
@@ -285,16 +287,17 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 	static uint16_t prev_inst_addr = 0;
 	uint16_t addr = emulator->pc;
 
+	DebugState *debug_state = &emulator->debug_state;
+
 	Chip8Instruction instruction = bytes2inst(&emulator->memory[addr]);
 
 	// TODO: Process modified instruction before breakpoint handling
-	bool modified = g_debug_state.memory_modifications[addr];
+	bool modified = debug_state->memory_modifications[addr];
 	if (modified || addr != prev_inst_addr && trace) {
 		AddressLookup *lookup =
-			&g_debug_state.disassembly
-				 .addressbook[addr - g_debug_state.disassembly.base];
+			&debug_state->disassembly.addressbook[addr - debug_state->disassembly.base];
 		DisassembledInstruction *disasm =
-			&g_debug_state.disassembly.instruction_blocks[lookup->block_offset]
+			&debug_state->disassembly.instruction_blocks[lookup->block_offset]
 				 .instructions[lookup->array_offset];
 
 		if (modified) {
@@ -305,7 +308,7 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 			printf("Modified instruction @ 0x%03hx:\n\t%s\n\t%s\n", addr, old_str,
 			       disasm->asm_str);
 
-			g_debug_state.memory_modifications[addr] = false;
+			debug_state->memory_modifications[addr] = false;
 			free(old_str);
 		}
 
@@ -330,6 +333,8 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 		fprintf(stderr, "[!] PC exceeds memory boundaries\n");
 		return false;
 	}
+
+	DebugState *debug_state = &emulator->debug_state;
 
 	switch (instruction_type(instruction)) {
 	case CHIP8_CLS:
@@ -556,14 +561,14 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 		break;
 	}
 	case CHIP8_LD_I_VX:
-		g_debug_state.written_to_memory = true;
+		debug_state->written_to_memory = true;
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			uint16_t addr = emulator->vi + i;
 			emulator->memory[addr] = emulator->registers[i];
-			g_debug_state.memory_modifications[addr] = true;
-			if (g_debug_state.memory_breakpoints[addr]) {
-				g_debug_state.debug_mode = true;
-				g_debug_state.memory_breakpoint_hit = true;
+			debug_state->memory_modifications[addr] = true;
+			if (debug_state->memory_breakpoints[addr]) {
+				debug_state->debug_mode = true;
+				debug_state->memory_breakpoint_hit = true;
 			}
 		}
 		if (emulator->configuration & CONFIG_CHIP8_MEMORY) {
@@ -574,9 +579,9 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			uint16_t addr = emulator->vi + i;
 			emulator->registers[i] = emulator->memory[addr];
-			if (g_debug_state.memory_breakpoints[addr]) {
-				g_debug_state.debug_mode = true;
-				g_debug_state.memory_breakpoint_hit = true;
+			if (debug_state->memory_breakpoints[addr]) {
+				debug_state->debug_mode = true;
+				debug_state->memory_breakpoint_hit = true;
 			}
 		}
 		if (emulator->configuration & CONFIG_CHIP8_MEMORY) {
@@ -600,7 +605,7 @@ void handle_timers(EmulatorState *emulator) {
 	}
 	if (emulator->st > 0) {
 		emulator->st--;
-		if (!g_debug_state.debug_mode) {
+		if (!emulator->debug_state.debug_mode) {
 			beeper_state(true);
 		}
 	} else {
@@ -619,6 +624,8 @@ bool handle_input(EmulatorState *emulator) {
 		}
 
 		if (!g_inside_text_input) {
+			DebugState *debug_state = &emulator->debug_state;
+
 			switch (e.type) {
 			case SDL_KEYUP: {
 				update_keyboard_state(emulator, e.key.keysym.scancode, 0);
@@ -627,19 +634,19 @@ bool handle_input(EmulatorState *emulator) {
 			case SDL_KEYDOWN: {
 				switch (e.key.keysym.scancode) {
 				case SDL_SCANCODE_SPACE:
-					g_debug_state.debug_mode = !g_debug_state.debug_mode;
+					debug_state->debug_mode = !debug_state->debug_mode;
 					printf("%s emulator\n",
-					       g_debug_state.debug_mode ? "Paused" : "Unpaused");
+					       debug_state->debug_mode ? "Paused" : "Unpaused");
 					break;
 				case SDL_SCANCODE_G:
-					g_debug_state.skip_breakpoints =
-						!g_debug_state.skip_breakpoints;
+					debug_state->skip_breakpoints =
+						!debug_state->skip_breakpoints;
 					break;
 				case SDL_SCANCODE_H:
 					g_show_debug_ui = !g_show_debug_ui;
 					break;
 				case SDL_SCANCODE_N:
-					if (g_debug_state.debug_mode) {
+					if (debug_state->debug_mode) {
 						execute(emulator, fetch_next(emulator, true));
 					}
 					break;
@@ -716,6 +723,8 @@ void update_keyboard_state(EmulatorState *emulator, SDL_Scancode scancode, uint8
 }
 
 void render(EmulatorState *emulator) {
+	DebugState *debug_state = &emulator->debug_state;
+
 	SDL_SetRenderDrawColor(g_renderer, 0x00, 0x05, 0x00, 0xFF);
 	SDL_RenderClear(g_renderer);
 
@@ -879,7 +888,7 @@ void render(EmulatorState *emulator) {
 				snprintf(byte_str, sizeof(byte_str), "%02hx", byte);
 				nk_layout_space_push(g_ctx, nk_rect(x, y, byte_width, line_height));
 				nk_selectable_label(g_ctx, byte_str, NK_TEXT_CENTERED,
-						    g_debug_state.memory_breakpoints + i);
+						    debug_state->memory_breakpoints + i);
 
 				x += byte_width;
 
@@ -889,11 +898,11 @@ void render(EmulatorState *emulator) {
 						nk_layout_space_push(g_ctx,
 								     nk_rect(x, y, char_width,
 									     line_height));
-						nk_selectable_text(
-							g_ctx, ascii + j, 1,
-							NK_TEXT_ALIGN_MIDDLE | NK_TEXT_ALIGN_LEFT,
-							g_debug_state.memory_breakpoints + i - 15 +
-								j);
+						nk_selectable_text(g_ctx, ascii + j, 1,
+								   NK_TEXT_ALIGN_MIDDLE |
+									   NK_TEXT_ALIGN_LEFT,
+								   debug_state->memory_breakpoints +
+									   i - 15 + j);
 						x += char_width;
 					}
 				}
@@ -909,14 +918,14 @@ void render(EmulatorState *emulator) {
 			// TODO: Separate out debugging logic and state
 			// TODO: Timeless debugging like rr
 			nk_layout_row_dynamic(g_ctx, default_line_height, 2);
-			if (nk_button_label(g_ctx, g_debug_state.debug_mode ? "Resume" : "Pause")) {
-				g_debug_state.debug_mode = !g_debug_state.debug_mode;
+			if (nk_button_label(g_ctx, debug_state->debug_mode ? "Resume" : "Pause")) {
+				debug_state->debug_mode = !debug_state->debug_mode;
 			}
 			if (nk_button_label(g_ctx, "Step")) {
 				execute(emulator, fetch_next(emulator, true));
 			}
 			nk_layout_row_dynamic(g_ctx, default_line_height, 1);
-			nk_checkbox_label(g_ctx, "Ignore BPs", &g_debug_state.skip_breakpoints);
+			nk_checkbox_label(g_ctx, "Ignore BPs", &debug_state->skip_breakpoints);
 
 			nk_layout_row_dynamic(g_ctx, default_line_height, 1);
 			if (nk_button_label(g_ctx, "Reset")) {
@@ -998,8 +1007,8 @@ void render(EmulatorState *emulator) {
 
 			size_t skipped = 0;
 			bool blanked = false;
-			for (uint16_t ip = 0; ip < g_debug_state.disassembly.abook_length; ++ip) {
-				AddressLookup *lookup = &g_debug_state.disassembly.addressbook[ip];
+			for (uint16_t ip = 0; ip < debug_state->disassembly.abook_length; ++ip) {
+				AddressLookup *lookup = &debug_state->disassembly.addressbook[ip];
 				if (lookup->type != ADDR_INSTRUCTION) {
 					skipped++;
 					continue;
@@ -1016,19 +1025,19 @@ void render(EmulatorState *emulator) {
 				skipped = 0;
 
 				DisassembledInstruction *instruction =
-					&g_debug_state.disassembly
+					&debug_state->disassembly
 						 .instruction_blocks[lookup->block_offset]
 						 .instructions[lookup->array_offset];
 
 				static uint16_t prev_pc = 0;
 				snprintf(text, sizeof(text), "0x%08hx  %s",
-					 instruction->address + g_debug_state.disassembly.base,
+					 instruction->address + debug_state->disassembly.base,
 					 instruction->asm_str);
 
 				// Highlight instructions with breakpoints
 				struct nk_color colour = g_ctx->style.selectable.normal.data.color;
 				if (emulator->pc ==
-				    instruction->address + g_debug_state.disassembly.base) {
+				    instruction->address + debug_state->disassembly.base) {
 					g_ctx->style.selectable.normal.data.color = pc_colour;
 
 					if (emulator->pc != prev_pc) {
@@ -1040,12 +1049,12 @@ void render(EmulatorState *emulator) {
 					}
 				}
 
-				uint16_t addr = g_debug_state.disassembly.base + ip;
+				uint16_t addr = debug_state->disassembly.base + ip;
 				if (nk_selectable_label(g_ctx, text, NK_TEXT_LEFT,
-							g_debug_state.instruction_breakpoints +
+							debug_state->instruction_breakpoints +
 								addr)) {
 					printf("Breakpoint %s @ 0x%hx!\n",
-					       g_debug_state.instruction_breakpoints[addr] ?
+					       debug_state->instruction_breakpoints[addr] ?
 						       "enabled" :
 						       "disabled",
 					       addr);
@@ -1279,20 +1288,21 @@ void dump_stack(EmulatorState *emulator) {
 
 static inline void dump_memory(EmulatorState *emulator) {
 	fprintf(stderr, "\n===== MEMORY DUMP ====\n");
-	if (!g_debug_state.latest_memory_dump) {
+	if (!emulator->debug_state.latest_memory_dump) {
 		refresh_dump(emulator);
 	}
-	printf("%s\n", g_debug_state.latest_memory_dump);
+	printf("%s\n", emulator->debug_state.latest_memory_dump);
 }
 
 void refresh_dump(EmulatorState *emulator) {
-	if (g_debug_state.written_to_memory || !g_debug_state.latest_memory_dump) {
-		if (g_debug_state.latest_memory_dump) {
-			free(g_debug_state.latest_memory_dump);
+	DebugState *debug_state = &emulator->debug_state;
+	if (debug_state->written_to_memory || !debug_state->latest_memory_dump) {
+		if (debug_state->latest_memory_dump) {
+			free(debug_state->latest_memory_dump);
 		}
-		g_debug_state.latest_memory_dump =
+		debug_state->latest_memory_dump =
 			hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
-		g_debug_state.written_to_memory = false;
+		debug_state->written_to_memory = false;
 	}
 }
 
@@ -1303,7 +1313,7 @@ void dump_state(EmulatorState *emulator) {
 }
 
 void reset_state(EmulatorState *emulator) {
-	free_disassembly(&g_debug_state.disassembly);
+	free_disassembly(&emulator->debug_state.disassembly);
 
 	char *rom_path = emulator->rom_path;
 	uint8_t *rom = emulator->rom;
@@ -1344,10 +1354,11 @@ void reset_state(EmulatorState *emulator) {
 
 	memcpy(emulator->memory + PROG_BASE, emulator->rom, emulator->rom_size);
 
-	g_debug_state.written_to_memory = false;
-	g_debug_state.latest_memory_dump = hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
-	g_debug_state.disassembly = disassemble_rd(emulator->memory + PROG_BASE,
-						   EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE);
+	emulator->debug_state.written_to_memory = false;
+	emulator->debug_state.latest_memory_dump =
+		hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
+	emulator->debug_state.disassembly = disassemble_rd(
+		emulator->memory + PROG_BASE, EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE);
 }
 
 void free_emulator(EmulatorState *emulator) {
