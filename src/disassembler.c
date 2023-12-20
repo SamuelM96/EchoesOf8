@@ -95,7 +95,7 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 
 		InstructionBlock block = { 0 };
 
-		while (ip < length) {
+		while (ip < length && disassembly.addressbook[ip].type != ADDR_INSTRUCTION) {
 			Chip8Instruction instruction = bytes2inst(code + ip);
 			DisassembledInstruction disasm = {
 				.instruction = instruction,
@@ -118,32 +118,57 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 
 			arrput(block.instructions, disasm);
 
-			// Instructions that effect control flow
-			// "Skipping" instructions can be parsed linearly due to their
-			// predictable behaviour.
-			if (instruction.raw == 0x00EE) {
+			bool should_break = false;
+			switch (instruction_type(instruction)) {
+			case CHIP8_RET:
+				should_break = true;
 				break;
-			} else if (instruction.aformat.opcode == 0x1 // JMP addr
-				   || instruction.aformat.opcode == 0x2) { // CALL addr
+			case CHIP8_JMP_ADDR:
+			case CHIP8_CALL_ADDR: {
 				uint16_t addr = instruction.aformat.addr - PROG_BASE;
 				if (disassembly.addressbook[addr].type == ADDR_UNKNOWN) {
-					arrput(queue, addr);
 					disassembly.addressbook[addr].type = ADDR_MARKED;
+					arrput(queue, addr);
 				}
 				if (instruction.aformat.opcode == 0x1) {
-					break;
+					should_break = true;
 				}
-			} else if (instruction.aformat.opcode == 0xB) { // JMP V0, addr
+				break;
+			}
+			case CHIP8_SE_VX_BYTE:
+			case CHIP8_SNE_VX_BYTE:
+			case CHIP8_SE_VX_VY:
+			case CHIP8_SNE_VX_VY:
+			case CHIP8_SKP_VX:
+			case CHIP8_SKNP_VX: {
+				// Add address that would be skipped to if condition is true.
+				// This catches JMP statements that may halt disassembly.
+				uint16_t addr = ip + 4;
+				if (disassembly.addressbook[addr].type == ADDR_UNKNOWN) {
+					disassembly.addressbook[addr].type = ADDR_MARKED;
+					arrput(queue, addr);
+				}
+			} break;
+			case CHIP8_JMP_V0_ADDR:
 				// Unconditional jump that requires runtime info
 				// - can't disassemble unknown address
+				should_break = true;
+				break;
+			default:
+				break;
+			}
+
+			if (should_break) {
 				break;
 			}
 
 			ip += 2;
 		}
 
-		arrput(disassembly.instruction_blocks, block);
-		disassembly.iblock_length++;
+		if (block.length) {
+			arrput(disassembly.instruction_blocks, block);
+			disassembly.iblock_length++;
+		}
 	}
 
 	arrfree(queue);
@@ -183,6 +208,7 @@ Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base) {
 		}
 	}
 
+	// printf("Length: %zu\nAddressbook: %zu\n", length, disassembly.abook_length);
 	assert(disassembly.abook_length == length);
 
 	return disassembly;

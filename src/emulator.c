@@ -1363,6 +1363,10 @@ void reset_state(EmulatorState *emulator) {
 		hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
 	emulator->debug_state.disassembly = disassemble_rd(
 		emulator->memory + PROG_BASE, EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE);
+
+	char *disasm_str = disassembly2str(&emulator->debug_state.disassembly);
+	printf("%s\n", disasm_str);
+	free(disasm_str);
 }
 
 void free_emulator(EmulatorState *emulator) {
