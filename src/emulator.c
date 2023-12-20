@@ -40,25 +40,120 @@
 #include <time.h>
 #include <unistd.h>
 
-// Addresses that have been modified and are executed need to be redisassembled
-bool g_memory_modifications[EMULATOR_MEMORY_SIZE] = { false };
+#define EMULATOR_MEMORY_SIZE 4096
+#define EMULATOR_STACK_SIZE 16
 
-Disassembly g_disassembly;
-char *g_latest_memory_dump = NULL;
-bool g_written_to_memory = false;
-bool g_debug = false;
-bool g_skip_breakpoints = false;
-nk_bool g_instruction_breakpoints[EMULATOR_MEMORY_SIZE] = { false };
-nk_bool g_memory_breakpoints[EMULATOR_MEMORY_SIZE] = { false };
+#define CONFIG_CHIP8_VF_RESET 0b1
+#define CONFIG_CHIP8_MEMORY 0b10
+#define CONFIG_CHIP8_DISP_WAIT 0b100
+#define CONFIG_CHIP8_CLIPPING 0b1000
+#define CONFIG_CHIP8_SHIFTING 0b10000
+#define CONFIG_CHIP8_JUMPING 0b100000
+
+#define CONFIG_CHIP8 \
+	CONFIG_CHIP8_VF_RESET | CONFIG_CHIP8_MEMORY | CONFIG_CHIP8_DISP_WAIT | \
+		CONFIG_CHIP8_CLIPPING | CONFIG_CHIP8_SHIFTING | CONFIG_CHIP8_JUMPING
+
+#define NANOSECONDS_PER_SECOND 1000000000
+#define TARGET_HZ 60
+
+#define PIXEL_COLOUR 0xFF97F1CD
+#define pixel(emulator, x, y) (emulator)->display[(y) * TARGET_WIDTH + (x)]
+#define FONT_BASE_ADDR 0x050
+
+#define TARGET_WIDTH 64
+#define TARGET_HEIGHT 32
+#define SCREEN_WIDTH 1280
+#define SCREEN_HEIGHT 640
+
+typedef enum CyclesPerFrameType {
+	CPF_7 = 0,
+	CPF_10,
+	CPF_15,
+	CPF_20,
+	CPF_30,
+	CPF_100,
+	CPF_200,
+	CPF_500,
+	CPF_1000,
+} CyclesPerFrameType;
+#define DEFAULT_CYCLES_PER_FRAME CPF_100
+
+typedef struct EmulatorState {
+	// ROM to be loaded into RAM and executed
+	char *rom_path;
+	uint8_t *rom;
+	size_t rom_size;
+
+	// 0x000 - 0x1FF = Interpreter memory, not for programs
+	// Programs start at 0x200 (512)
+	// Some start at 0x600 (1536) (ETI 660 computer)
+	uint8_t memory[EMULATOR_MEMORY_SIZE];
+
+	// Stores return addresses
+	// Allows for 16 levels of nested subroutines
+	uint16_t stack[EMULATOR_STACK_SIZE];
+
+	// 0-F general purpose registers
+	uint8_t registers[16];
+
+	// Stack pointer
+	uint8_t sp;
+
+	// For memory addresses, lower 12bits used
+	uint16_t vi;
+
+	// Program counter
+	uint16_t pc;
+
+	// Delay timer
+	uint8_t dt;
+
+	// Sound timer
+	uint8_t st;
+
+	// Display pixels
+	uint32_t display[TARGET_WIDTH * TARGET_HEIGHT];
+	bool display_interrupted;
+
+	// Keyboard state, 1 = Pressed
+	uint8_t keyboard[16];
+
+	// CHIP-8 vs SUPER-CHIP/CHIP-48 differences
+	uint8_t configuration;
+
+	CyclesPerFrameType cycles_per_frame;
+} EmulatorState;
+
+typedef struct BeeperState {
+	SDL_AudioSpec spec;
+	SDL_AudioDeviceID id;
+	double volume;
+	double current_volume;
+	double frequency;
+	double phase;
+	bool in_attack;
+	bool in_release;
+	bool on;
+} BeeperState;
+
 // TODO: Tidy up breakpoint handling - event based?
-bool g_inst_breakpoint_hit = false;
-bool g_memory_breakpoint_hit = false;
-bool g_show_debug_ui = false;
-bool g_inside_text_input = false;
+typedef struct DebugState {
+	Disassembly disassembly;
+	char *latest_memory_dump;
+	bool memory_modifications[EMULATOR_MEMORY_SIZE];
+	bool instruction_breakpoints[EMULATOR_MEMORY_SIZE];
+	bool memory_breakpoints[EMULATOR_MEMORY_SIZE];
+
+	bool debug_mode;
+	bool written_to_memory;
+	bool skip_breakpoints;
+	bool inst_breakpoint_hit;
+	bool memory_breakpoint_hit;
+} DebugState;
 
 const int SCALE_X = SCREEN_WIDTH / TARGET_WIDTH;
 const int SCALE_Y = SCREEN_HEIGHT / TARGET_HEIGHT;
-
 const int CYCLES_PER_FRAME[] = {
 	[CPF_7] = 7,	 [CPF_10] = 10,	  [CPF_15] = 15,   [CPF_20] = 20,     [CPF_30] = 30,
 	[CPF_100] = 100, [CPF_200] = 200, [CPF_500] = 500, [CPF_1000] = 1000,
@@ -69,105 +164,121 @@ const char *CYCLES_PER_FRAME_STR[] = {
 	[CPF_200] = "200", [CPF_500] = "500", [CPF_1000] = "1000",
 };
 
+DebugState g_debug_state = { 0 };
+bool g_show_debug_ui = false;
+bool g_inside_text_input = false;
+
 // SDL & Nuklear state
 SDL_Window *g_window = NULL;
 SDL_Renderer *g_renderer = NULL;
 SDL_Texture *g_texture = NULL;
-struct nk_context *g_nk_ctx;
-
-// Beeper state
-// TODO: Bundle into a struct and pass via userdata(?)
-SDL_AudioSpec g_beeper_spec;
-SDL_AudioDeviceID g_beeper_id;
-double g_beeper_volume = 0.1;
-double g_beeper_current_volume = 0.0;
-double g_beeper_frequency = 261.63;
-double g_beeper_phase = 0.0;
-bool g_beeper_in_attack = false;
-bool g_beeper_in_release = false;
-bool g_beeper_on = false;
+struct nk_context *g_ctx;
+BeeperState g_beeper = { 0 };
 
 static void beeper_callback(void *, uint8_t *, int);
 void beeper_state(bool);
-static void beeper_callback(void *, uint8_t *, int);
-void handle_timers(EmulatorState *);
-Chip8Instruction fetch_next(EmulatorState *, bool);
+void free_graphics();
+static inline void dump_memory(EmulatorState *);
 void dump_registers(EmulatorState *);
 void dump_stack(EmulatorState *);
-static inline void dump_memory(EmulatorState *);
 void dump_state(EmulatorState *);
-void reset_state(EmulatorState *);
-void init_graphics();
-void update_keyboard_state(EmulatorState *, SDL_Scancode, uint8_t);
-bool handle_input(EmulatorState *);
-void render(EmulatorState *);
-void cleanup();
-void print_instruction_state(EmulatorState *, Chip8Instruction);
 bool execute(EmulatorState *, Chip8Instruction);
+Chip8Instruction fetch_next(EmulatorState *, bool);
+void free_emulator(EmulatorState *);
+bool handle_input(EmulatorState *);
+void handle_timers(EmulatorState *);
+void init_beeper(BeeperState *);
+void init_graphics();
+void load_rom(EmulatorState *, uint8_t *, size_t, char *);
+void print_instruction_state(EmulatorState *, Chip8Instruction);
+void refresh_dump(EmulatorState *);
+void render(EmulatorState *);
+void reset_state(EmulatorState *);
+void update_keyboard_state(EmulatorState *, SDL_Scancode, uint8_t);
 
-// Sawtooth beeper
-static void beeper_callback(void *userdata, uint8_t *_stream, int _len) {
-	const double attack_release_time = 0.005;
+void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
+	printf("Emulating!\n");
 
-	int16_t *stream = (int16_t *)_stream;
-	int len = _len / sizeof(int16_t);
+	EmulatorState emulator = { 0 };
+	emulator.configuration = CONFIG_CHIP8;
+	// emulator.configuration ^= CONFIG_CHIP8_DISP_WAIT;
+	emulator.cycles_per_frame = DEFAULT_CYCLES_PER_FRAME;
 
-	double attack_release_delta = g_beeper_volume / (attack_release_time * g_beeper_spec.freq);
-	double phase_increment = 2.0 * g_beeper_frequency / g_beeper_spec.freq;
+	srand(time(NULL));
+	load_rom(&emulator, rom, rom_size, rom_path);
+	init_graphics();
 
-	for (int sample = 0; sample < len; ++sample) {
-		g_beeper_phase += phase_increment;
-		if (g_beeper_phase >= 1.0)
-			g_beeper_phase -= 2.0;
+	struct timespec start, current;
+	long long frame_time = NANOSECONDS_PER_SECOND / TARGET_HZ;
+	long long elapsed_time;
 
-		if (g_beeper_in_attack) {
-			g_beeper_current_volume += attack_release_delta;
-			if (g_beeper_current_volume >= g_beeper_volume) {
-				g_beeper_current_volume = g_beeper_volume;
-				g_beeper_in_attack = false;
+	if (debug) {
+		g_debug_state.debug_mode = true;
+		g_show_debug_ui = true;
+		printf("Debugging enabled!\n");
+		printf("  - <SPACE> to pause/unpause\n");
+		printf("  - <H> to toggle debug UI\n");
+		printf("  - <N> to step (execute the next instruction)\n");
+	}
+
+	bool running = true;
+	while (running) {
+		running = handle_input(&emulator);
+		clock_gettime(CLOCK_MONOTONIC, &start);
+
+		if (g_debug_state.memory_breakpoint_hit) {
+			printf("Memory breakpoint hit!\n");
+			g_debug_state.memory_breakpoint_hit = false;
+		}
+
+		if (!g_debug_state.debug_mode) {
+			for (int cycle = 0;
+			     cycle < CYCLES_PER_FRAME[emulator.cycles_per_frame] && running;
+			     ++cycle) {
+				running = handle_input(&emulator);
+				if (!g_debug_state.skip_breakpoints &&
+				    g_debug_state.instruction_breakpoints[emulator.pc] &&
+				    !g_debug_state.inst_breakpoint_hit) {
+					g_debug_state.inst_breakpoint_hit = true;
+					g_debug_state.debug_mode = true;
+					printf("Hit breakpoint @ 0x%03hx\n", emulator.pc);
+					break;
+				}
+
+				g_debug_state.inst_breakpoint_hit = false;
+
+				Chip8Instruction instruction = fetch_next(&emulator, false);
+				if (!execute(&emulator, instruction)) {
+					dump_state(&emulator);
+					g_debug_state.debug_mode = true;
+					printf("\n[!] Something went wrong @ 0x%03hx: ",
+					       emulator.pc - 2);
+					char *asm_str = inst2str(instruction);
+					printf("%s\n", asm_str);
+					free(asm_str);
+				}
+				if (emulator.display_interrupted ||
+				    g_debug_state.memory_breakpoint_hit) {
+					break;
+				}
+			}
+
+			if (!g_debug_state.inst_breakpoint_hit) {
+				handle_timers(&emulator);
 			}
 		}
 
-		if (g_beeper_in_release) {
-			g_beeper_current_volume -= attack_release_delta;
-			if (g_beeper_current_volume <= 0.0) {
-				g_beeper_current_volume = 0.0;
-				g_beeper_in_release = false;
-				SDL_PauseAudioDevice(g_beeper_id, 1);
-			}
-		}
+		render(&emulator);
 
-		stream[sample] = g_beeper_phase * g_beeper_current_volume * INT16_MAX / 2.0;
+		do { // Lock to TARGET_HZ
+			clock_gettime(CLOCK_MONOTONIC, &current);
+			elapsed_time = (current.tv_sec - start.tv_sec) * NANOSECONDS_PER_SECOND +
+				       (current.tv_nsec - start.tv_nsec);
+		} while (elapsed_time < frame_time);
 	}
-}
 
-void beeper_state(bool on) {
-	if (!g_beeper_on && on) {
-		g_beeper_on = true;
-		g_beeper_in_attack = true;
-		g_beeper_in_release = false;
-		g_beeper_current_volume = 0.0;
-		SDL_PauseAudioDevice(g_beeper_id, 0);
-	} else if (g_beeper_on && !on) {
-		g_beeper_on = false;
-		g_beeper_in_attack = false;
-		g_beeper_in_release = true;
-	}
-}
-
-void handle_timers(EmulatorState *emulator) {
-	// TODO: Handle timers in debug mode
-	if (emulator->dt > 0) {
-		emulator->dt--;
-	}
-	if (emulator->st > 0) {
-		emulator->st--;
-		if (!g_debug) {
-			beeper_state(true);
-		}
-	} else {
-		beeper_state(false);
-	}
+	free_graphics();
+	free_emulator(&emulator);
 }
 
 Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
@@ -177,11 +288,13 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 	Chip8Instruction instruction = bytes2inst(&emulator->memory[addr]);
 
 	// TODO: Process modified instruction before breakpoint handling
-	bool modified = g_memory_modifications[addr];
+	bool modified = g_debug_state.memory_modifications[addr];
 	if (modified || addr != prev_inst_addr && trace) {
-		AddressLookup *lookup = &g_disassembly.addressbook[addr - g_disassembly.base];
+		AddressLookup *lookup =
+			&g_debug_state.disassembly
+				 .addressbook[addr - g_debug_state.disassembly.base];
 		DisassembledInstruction *disasm =
-			&g_disassembly.instruction_blocks[lookup->block_offset]
+			&g_debug_state.disassembly.instruction_blocks[lookup->block_offset]
 				 .instructions[lookup->array_offset];
 
 		if (modified) {
@@ -192,7 +305,7 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 			printf("Modified instruction @ 0x%03hx:\n\t%s\n\t%s\n", addr, old_str,
 			       disasm->asm_str);
 
-			g_memory_modifications[addr] = false;
+			g_debug_state.memory_modifications[addr] = false;
 			free(old_str);
 		}
 
@@ -210,622 +323,6 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 	emulator->pc += 2;
 
 	return instruction;
-}
-
-void dump_registers(EmulatorState *emulator) {
-	fprintf(stderr, "===== REGISTERS DUMP ====\n");
-	for (int i = 0; i < sizeof(emulator->registers); ++i) {
-		fprintf(stderr, "V%X = 0x%02hx  ", i, emulator->registers[i]);
-		if ((i + 1) % 4 == 0) {
-			fprintf(stderr, "\n");
-		}
-	}
-	fprintf(stderr, "SP = 0x%02hx  ", emulator->sp);
-	fprintf(stderr, "DT = 0x%02hx  ", emulator->dt);
-	fprintf(stderr, "ST = 0x%02hx\n", emulator->st);
-	fprintf(stderr, "VI = 0x%04hx\n", emulator->vi);
-	fprintf(stderr, "PC = 0x%04hx\n", emulator->pc);
-}
-
-void dump_stack(EmulatorState *emulator) {
-	fprintf(stderr, "\n===== STACK DUMP ====\n");
-	for (int i = 0; i < EMULATOR_STACK_SIZE; ++i) {
-		fprintf(stderr, "[%02hhd] = 0x%03hx  ", i, emulator->stack[i]);
-		if (i == emulator->sp) {
-			printf("<-- SP  ");
-		}
-
-		if ((i + 1) % 2 == 0) {
-			printf("\n");
-		}
-	}
-}
-
-void refresh_dump(EmulatorState *emulator) {
-	if (g_written_to_memory || !g_latest_memory_dump) {
-		if (g_latest_memory_dump) {
-			free(g_latest_memory_dump);
-		}
-		g_latest_memory_dump = hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
-		g_written_to_memory = false;
-	}
-}
-static inline void dump_memory(EmulatorState *emulator) {
-	fprintf(stderr, "\n===== MEMORY DUMP ====\n");
-	if (!g_latest_memory_dump) {
-		refresh_dump(emulator);
-	}
-	printf("%s\n", g_latest_memory_dump);
-}
-
-void dump_state(EmulatorState *emulator) {
-	dump_registers(emulator);
-	dump_stack(emulator);
-	// dump_memory(emulator);
-}
-
-void reset_state(EmulatorState *emulator) {
-	free_disassembly(&g_disassembly);
-
-	char *rom_path = emulator->rom_path;
-	uint8_t *rom = emulator->rom;
-	size_t rom_size = emulator->rom_size;
-	size_t config = emulator->configuration;
-	size_t cycles_per_frame = emulator->cycles_per_frame;
-
-	memset(emulator, 0, sizeof(*emulator));
-
-	emulator->rom_path = rom_path;
-	emulator->rom = rom;
-	emulator->rom_size = rom_size;
-	emulator->configuration = config;
-	emulator->cycles_per_frame = cycles_per_frame;
-	emulator->pc = PROG_BASE;
-
-	const uint8_t emulator_fonts[80] = {
-		// https://tobiasvl.github.io/blog/write-a-chip-8-emulator/#fx29-font-character
-		0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
-		0x20, 0x60, 0x20, 0x20, 0x70, // 1
-		0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
-		0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
-		0x90, 0x90, 0xF0, 0x10, 0x10, // 4
-		0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
-		0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
-		0xF0, 0x10, 0x20, 0x40, 0x40, // 7
-		0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
-		0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
-		0xF0, 0x90, 0xF0, 0x90, 0x90, // A
-		0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
-		0xF0, 0x80, 0x80, 0x80, 0xF0, // C
-		0xE0, 0x90, 0x90, 0x90, 0xE0, // D
-		0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
-		0xF0, 0x80, 0xF0, 0x80, 0x80, // F
-	};
-
-	memcpy(emulator->memory + FONT_BASE_ADDR, emulator_fonts, sizeof(emulator_fonts));
-
-	memcpy(emulator->memory + PROG_BASE, emulator->rom, emulator->rom_size);
-
-	g_written_to_memory = false;
-	g_latest_memory_dump = hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
-	g_disassembly = disassemble_rd(emulator->memory + PROG_BASE,
-				       EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE);
-}
-
-void load_rom(EmulatorState *emulator, uint8_t *rom, size_t rom_size, char *rom_path) {
-	printf("[*] Loading ROM @ %s\n", rom_path);
-	if (emulator->rom) {
-		free(emulator->rom);
-	}
-	if (emulator->rom_path) {
-		free(emulator->rom_path);
-	}
-
-	if (rom_path) {
-		size_t path_len = strlen(rom_path);
-		emulator->rom_path = malloc(path_len);
-		memcpy(emulator->rom_path, rom_path, path_len);
-	} else {
-		emulator->rom_path = NULL;
-	}
-
-	emulator->rom = rom;
-	emulator->rom_size = rom_size;
-
-	reset_state(emulator);
-}
-
-void update_keyboard_state(EmulatorState *emulator, SDL_Scancode scancode, uint8_t state) {
-	bool keypad_pressed = true;
-	switch (scancode) {
-	case SDL_SCANCODE_1:
-		emulator->keyboard[0x1] = state;
-		break;
-	case SDL_SCANCODE_2:
-		emulator->keyboard[0x2] = state;
-		break;
-	case SDL_SCANCODE_3:
-		emulator->keyboard[0x3] = state;
-		break;
-	case SDL_SCANCODE_4:
-		emulator->keyboard[0xC] = state;
-		break;
-	case SDL_SCANCODE_Q:
-		emulator->keyboard[0x4] = state;
-		break;
-	case SDL_SCANCODE_W:
-		emulator->keyboard[0x5] = state;
-		break;
-	case SDL_SCANCODE_E:
-		emulator->keyboard[0x6] = state;
-		break;
-	case SDL_SCANCODE_R:
-		emulator->keyboard[0xD] = state;
-		break;
-	case SDL_SCANCODE_A:
-		emulator->keyboard[0x7] = state;
-		break;
-	case SDL_SCANCODE_S:
-		emulator->keyboard[0x8] = state;
-		break;
-	case SDL_SCANCODE_D:
-		emulator->keyboard[0x9] = state;
-		break;
-	case SDL_SCANCODE_F:
-		emulator->keyboard[0xE] = state;
-		break;
-	case SDL_SCANCODE_Z:
-		emulator->keyboard[0xA] = state;
-		break;
-	case SDL_SCANCODE_X:
-		emulator->keyboard[0x0] = state;
-		break;
-	case SDL_SCANCODE_C:
-		emulator->keyboard[0xB] = state;
-		break;
-	case SDL_SCANCODE_V:
-		emulator->keyboard[0xF] = state;
-		break;
-	default:
-		keypad_pressed = false;
-		break;
-	}
-}
-
-bool handle_input(EmulatorState *emulator) {
-	SDL_Event e;
-	nk_input_begin(g_nk_ctx);
-	while (SDL_PollEvent(&e)) {
-		if (e.type == SDL_QUIT ||
-		    e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
-			printf("Quitting...\n");
-			return false;
-		}
-
-		if (!g_inside_text_input) {
-			switch (e.type) {
-			case SDL_KEYUP: {
-				update_keyboard_state(emulator, e.key.keysym.scancode, 0);
-				break;
-			}
-			case SDL_KEYDOWN: {
-				switch (e.key.keysym.scancode) {
-				case SDL_SCANCODE_SPACE:
-					g_debug = !g_debug;
-					printf("%s emulator\n", g_debug ? "Paused" : "Unpaused");
-					break;
-				case SDL_SCANCODE_G:
-					g_skip_breakpoints = !g_skip_breakpoints;
-					break;
-				case SDL_SCANCODE_H:
-					g_show_debug_ui = !g_show_debug_ui;
-					break;
-				case SDL_SCANCODE_N:
-					if (g_debug) {
-						execute(emulator, fetch_next(emulator, true));
-					}
-					break;
-				default:
-					update_keyboard_state(emulator, e.key.keysym.scancode, 1);
-					break;
-				}
-				break;
-			}
-			}
-		}
-		nk_sdl_handle_event(&e);
-	}
-	nk_input_end(g_nk_ctx);
-
-	return true;
-}
-
-void render(EmulatorState *emulator) {
-	SDL_SetRenderDrawColor(g_renderer, 0x00, 0x05, 0x00, 0xFF);
-	SDL_RenderClear(g_renderer);
-
-	const int emu_scale = 10;
-	const int emu_width = TARGET_WIDTH * emu_scale;
-	const int emu_height = TARGET_HEIGHT * emu_scale;
-	int emu_x = 0;
-	int emu_y = 0;
-
-	// TODO: Handle window resizing whilst maintaining aspect ratio of emulator
-	// display
-	// TODO: Scale and resize emulator display dynamically
-	// TODO: Change pixel colours
-	// TODO: Shows sprites in memory
-	// TODO: Save and load emulator state (snapshots)
-	// TODO: Call graph
-	// TODO: Decompiler output
-	// TODO: Audio waveform
-	if (g_show_debug_ui) {
-		const int window_flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE |
-					 NK_WINDOW_NO_SCROLLBAR;
-		const int window_width = SCREEN_WIDTH;
-		const int window_height = 800;
-		SDL_SetWindowSize(g_window, window_width, window_height);
-
-		struct nk_color active_colour = { 230, 150, 150, 255 };
-		struct nk_color error_colour = { 255, 80, 80, 255 };
-		struct nk_color pc_colour = { 80, 80, 85, 255 };
-
-		// Bounding boxes
-		struct nk_rect emu_config_rect = nk_rect(0, 0, 250, 250);
-		struct nk_rect stack_rect =
-			nk_rect(0, emu_config_rect.y + emu_config_rect.h, emu_config_rect.w, 310);
-		struct nk_rect memory_rect = nk_rect(0, stack_rect.y + stack_rect.h, 630,
-						     window_height - stack_rect.y - stack_rect.h);
-		struct nk_rect registers_rect =
-			nk_rect(emu_config_rect.x + emu_config_rect.w, emu_config_rect.y, 650, 239);
-		struct nk_rect disasm_rect =
-			nk_rect(registers_rect.x + registers_rect.w, registers_rect.y,
-				window_width - registers_rect.x - registers_rect.w, window_height);
-		struct nk_rect debug_rect = nk_rect(memory_rect.x + memory_rect.w, memory_rect.y,
-						    disasm_rect.x - memory_rect.x - memory_rect.w,
-						    memory_rect.h);
-
-		emu_x = registers_rect.x + (registers_rect.w - emu_width) / 2;
-		emu_y = registers_rect.y + registers_rect.h;
-
-		int default_line_height = 30;
-
-		if (nk_begin(g_nk_ctx, "Emulator Configuration", emu_config_rect, window_flags)) {
-			nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
-			nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
-			nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFTING;
-			nk_bool clipping = emulator->configuration & CONFIG_CHIP8_CLIPPING;
-			nk_bool jumping = emulator->configuration & CONFIG_CHIP8_JUMPING;
-			nk_bool memory = emulator->configuration & CONFIG_CHIP8_MEMORY;
-
-			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 2);
-			if (nk_checkbox_label(g_nk_ctx, "VF Reset", &vf_reset)) {
-				emulator->configuration ^= CONFIG_CHIP8_VF_RESET;
-			}
-			if (nk_checkbox_label(g_nk_ctx, "Display Wait", &disp_wait)) {
-				emulator->configuration ^= CONFIG_CHIP8_DISP_WAIT;
-			}
-			if (nk_checkbox_label(g_nk_ctx, "Clipping", &clipping)) {
-				emulator->configuration ^= CONFIG_CHIP8_CLIPPING;
-			}
-			if (nk_checkbox_label(g_nk_ctx, "Shifting", &shifting)) {
-				emulator->configuration ^= CONFIG_CHIP8_SHIFTING;
-			}
-			if (nk_checkbox_label(g_nk_ctx, "Jumping", &jumping)) {
-				emulator->configuration ^= CONFIG_CHIP8_JUMPING;
-			}
-			if (nk_checkbox_label(g_nk_ctx, "Memory", &memory)) {
-				emulator->configuration ^= CONFIG_CHIP8_MEMORY;
-			}
-
-			int selected_cpf = emulator->cycles_per_frame;
-			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 2);
-			nk_label(g_nk_ctx, "Cycles/frame", NK_TEXT_LEFT);
-			nk_combobox(g_nk_ctx, CYCLES_PER_FRAME_STR,
-				    sizeof(CYCLES_PER_FRAME) / sizeof(int), &selected_cpf, 20,
-				    nk_vec2(100, 225));
-			emulator->cycles_per_frame = selected_cpf;
-
-			nk_layout_row_dynamic(g_nk_ctx, 10, 1);
-			nk_spacer(g_nk_ctx);
-
-			nk_layout_row_dynamic(g_nk_ctx, 20, 1);
-			nk_label(g_nk_ctx, "Volume", NK_TEXT_LEFT);
-			static float volume = -1;
-			if (volume == -1) {
-				volume = (float)g_beeper_volume;
-			}
-			nk_slider_float(g_nk_ctx, 0, &volume, 1, 0.1);
-			g_beeper_volume = volume;
-		}
-		nk_end(g_nk_ctx);
-
-		if (nk_begin(g_nk_ctx, "Stack", stack_rect, window_flags)) {
-			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 2);
-			for (int i = 0; i < EMULATOR_STACK_SIZE; ++i) {
-				struct nk_color colour = g_nk_ctx->style.text.color;
-				if (emulator->sp == i) {
-					g_nk_ctx->style.text.color = active_colour;
-				}
-				nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "[%X] 0x%02hx", i,
-					  emulator->stack[i]);
-				g_nk_ctx->style.text.color = colour;
-			}
-		}
-		nk_end(g_nk_ctx);
-
-		if (nk_begin(g_nk_ctx, "Memory", memory_rect,
-			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
-			// TODO: Scroll memory into view when it hits a breakpoint
-			// TODO: Jump to PC button
-			// TODO: Jump to address from text field
-			char byte_str[3] = { 0 };
-			char ascii[17] = { 0 };
-			int x = 0;
-			int y = 10;
-			int char_width = 11;
-			int byte_width = 23;
-			int addr_width = 50;
-			int ascii_width = 130;
-			int line_height = 30;
-			char header_offsets[] = "0123456789ABCDEF";
-
-			// Header
-			nk_layout_space_begin(g_nk_ctx, NK_STATIC, 0, 18);
-			nk_layout_space_push(g_nk_ctx, nk_rect(x, y, addr_width, line_height));
-			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "Addr");
-			x += addr_width;
-			for (int i = 0; i < 16; ++i) {
-				nk_layout_space_push(g_nk_ctx,
-						     nk_rect(x, y, byte_width, line_height));
-				nk_text(g_nk_ctx, header_offsets + i, 1, NK_TEXT_CENTERED);
-				x += byte_width;
-			}
-			x += 10;
-			nk_layout_space_push(g_nk_ctx, nk_rect(x, y, 50, line_height));
-			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "ASCII");
-
-			// Hexdump
-			nk_layout_space_begin(g_nk_ctx, NK_STATIC, 0, 33);
-			for (uint16_t i = 0; i < EMULATOR_MEMORY_SIZE; ++i) {
-				char byte = ((char *)emulator->memory)[i];
-				if (isprint(byte)) {
-					ascii[i % 16] = byte;
-				} else {
-					ascii[i % 16] = '.';
-				}
-
-				if (i % 16 == 0) {
-					x = 0;
-					nk_layout_space_push(g_nk_ctx, nk_rect(x, y, addr_width,
-									       line_height));
-					nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "0x%03hx", i);
-					x += addr_width;
-				}
-
-				snprintf(byte_str, sizeof(byte_str), "%02hx", byte);
-				nk_layout_space_push(g_nk_ctx,
-						     nk_rect(x, y, byte_width, line_height));
-				nk_selectable_label(g_nk_ctx, byte_str, NK_TEXT_CENTERED,
-						    g_memory_breakpoints + i);
-
-				x += byte_width;
-
-				if ((i + 1) % 16 == 0) {
-					x += 10;
-					for (int j = 0; j < sizeof(ascii) - 1; ++j) {
-						nk_layout_space_push(g_nk_ctx,
-								     nk_rect(x, y, char_width,
-									     line_height));
-						nk_selectable_text(
-							g_nk_ctx, ascii + j, 1,
-							NK_TEXT_ALIGN_MIDDLE | NK_TEXT_ALIGN_LEFT,
-							g_memory_breakpoints + i - 15 + j);
-						x += char_width;
-					}
-				}
-			}
-			nk_layout_space_end(g_nk_ctx);
-		}
-		nk_end(g_nk_ctx);
-
-		if (nk_begin(g_nk_ctx, "Debug", debug_rect, window_flags)) {
-			// TODO: Conditional breakpoints, e.g., break on all DRW
-			// instructions
-			// TODO: Step in and out of functions
-			// TODO: Separate out debugging logic and state
-			// TODO: Timeless debugging like rr
-			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 2);
-			if (nk_button_label(g_nk_ctx, g_debug ? "Resume" : "Pause")) {
-				g_debug = !g_debug;
-			}
-			if (nk_button_label(g_nk_ctx, "Step")) {
-				execute(emulator, fetch_next(emulator, true));
-			}
-			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 1);
-			nk_checkbox_label(g_nk_ctx, "Ignore BPs", &g_skip_breakpoints);
-
-			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 1);
-			if (nk_button_label(g_nk_ctx, "Reset")) {
-				reset_state(emulator);
-			}
-
-			nk_layout_row_dynamic(g_nk_ctx, 3, 1);
-			nk_spacer(g_nk_ctx);
-
-			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 1);
-			static char rom_path[256] = { 0 };
-			static bool invalid = false;
-			static char *error_message = "Invalid file path";
-			if (!*rom_path && emulator->rom_path) {
-				strncpy(rom_path, emulator->rom_path, sizeof(rom_path));
-			}
-
-			nk_flags flags = nk_edit_string_zero_terminated(
-				g_nk_ctx, NK_EDIT_SIMPLE, rom_path, sizeof(rom_path), NULL);
-
-			g_inside_text_input = (flags & 0x1) > 0;
-
-			if (nk_button_label(g_nk_ctx, "Load ROM")) {
-				if (*rom_path) {
-					if (access(rom_path, F_OK) != -1) {
-						size_t rom_size;
-						uint8_t *rom = read_rom(rom_path, &rom_size);
-						load_rom(emulator, rom, rom_size, rom_path);
-						invalid = false;
-					} else {
-						invalid = true;
-						if (errno == ENOENT) {
-							error_message = "File does not exist";
-						} else if (errno == EACCES) {
-							error_message = "File is not accessible";
-						} else {
-							error_message = "Error accessing file";
-						}
-					}
-				} else {
-					invalid = true;
-					error_message = "Please enter a file path";
-				}
-			}
-			if (invalid) {
-				struct nk_color colour = g_nk_ctx->style.text.color;
-				g_nk_ctx->style.text.color = error_colour;
-				nk_label(g_nk_ctx, error_message, NK_TEXT_LEFT);
-				g_nk_ctx->style.text.color = colour;
-			}
-		}
-		nk_end(g_nk_ctx);
-
-		if (nk_begin(g_nk_ctx, "Registers", registers_rect, window_flags)) {
-			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 4);
-			for (int i = 0; i < sizeof(emulator->registers); ++i) {
-				nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "V%X = 0x%02hx", i,
-					  emulator->registers[i]);
-			}
-			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 4);
-			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "PC = 0x%04hx", emulator->pc);
-			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "VI = 0x%04hx", emulator->vi);
-			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "SP = 0x%02hx", emulator->sp);
-			nk_layout_row_dynamic(g_nk_ctx, default_line_height, 4);
-			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "ST = 0x%02hx", emulator->st);
-			nk_labelf(g_nk_ctx, NK_TEXT_LEFT, "DT = 0x%02hx", emulator->dt);
-		}
-		nk_end(g_nk_ctx);
-
-		if (nk_begin(g_nk_ctx, "Disassembly", disasm_rect,
-			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
-			// TODO: Replace with a list view-like setup. Nuklear groups?
-			struct nk_window *win = g_nk_ctx->current;
-			nk_layout_row_dynamic(g_nk_ctx, 20, 1);
-			char text[64] = { 0 };
-			g_nk_ctx->style.selectable.text_normal_active = active_colour;
-			g_nk_ctx->style.selectable.text_hover_active = active_colour;
-			g_nk_ctx->style.selectable.text_hover = active_colour;
-
-			size_t skipped = 0;
-			bool blanked = false;
-			for (uint16_t ip = 0; ip < g_disassembly.abook_length; ++ip) {
-				AddressLookup *lookup = &g_disassembly.addressbook[ip];
-				if (lookup->type != ADDR_INSTRUCTION) {
-					skipped++;
-					continue;
-				}
-
-				if (skipped > 1 && !blanked) {
-					blanked = true;
-					nk_labelf(g_nk_ctx, NK_TEXT_LEFT,
-						  "===== 0x%03zx BYTES OF DATA =====",
-						  skipped - 1); // Ignore INST_HALF
-				}
-
-				blanked = false;
-				skipped = 0;
-
-				DisassembledInstruction *instruction =
-					&g_disassembly.instruction_blocks[lookup->block_offset]
-						 .instructions[lookup->array_offset];
-
-				static uint16_t prev_pc = 0;
-				snprintf(text, sizeof(text), "0x%08hx  %s",
-					 instruction->address + g_disassembly.base,
-					 instruction->asm_str);
-
-				// Highlight instructions with breakpoints
-				struct nk_color colour =
-					g_nk_ctx->style.selectable.normal.data.color;
-				if (emulator->pc == instruction->address + g_disassembly.base) {
-					g_nk_ctx->style.selectable.normal.data.color = pc_colour;
-
-					if (emulator->pc != prev_pc) {
-						long target =
-							(int)win->layout->at_y - SCREEN_HEIGHT / 2;
-						target = target < 0 ? 0 : target;
-						win->scrollbar.y = target;
-						prev_pc = emulator->pc;
-					}
-				}
-
-				uint16_t addr = g_disassembly.base + ip;
-				if (nk_selectable_label(g_nk_ctx, text, NK_TEXT_LEFT,
-							g_instruction_breakpoints + addr)) {
-					printf("Breakpoint %s @ 0x%hx!\n",
-					       g_instruction_breakpoints[addr] ? "enabled" :
-										 "disabled",
-					       addr);
-					fflush(stdout);
-				}
-				g_nk_ctx->style.selectable.normal.data.color = colour;
-			}
-		}
-		nk_end(g_nk_ctx);
-	} else {
-		SDL_SetWindowSize(g_window, SCREEN_WIDTH, SCREEN_HEIGHT);
-	}
-
-	SDL_SetRenderTarget(g_renderer, g_texture);
-	SDL_UpdateTexture(g_texture, NULL, emulator->display, TARGET_WIDTH * sizeof(uint32_t));
-
-	SDL_SetRenderTarget(g_renderer, NULL);
-	SDL_RenderClear(g_renderer);
-	if (g_show_debug_ui) {
-		int window_w, window_h;
-		SDL_GetWindowSize(g_window, &window_w, &window_h);
-		SDL_Rect display_rect = { emu_x, emu_y, emu_width, emu_height };
-		SDL_RenderCopy(g_renderer, g_texture, NULL, &display_rect);
-	} else {
-		SDL_RenderCopy(g_renderer, g_texture, NULL, NULL);
-	}
-
-	nk_sdl_render(NK_ANTI_ALIASING_ON);
-
-	SDL_RenderPresent(g_renderer);
-}
-
-void cleanup() {
-	nk_sdl_shutdown();
-	SDL_DestroyTexture(g_texture);
-	SDL_DestroyRenderer(g_renderer);
-	SDL_DestroyWindow(g_window);
-	SDL_CloseAudioDevice(g_beeper_id);
-	SDL_Quit();
-}
-
-void print_instruction_state(EmulatorState *emulator, Chip8Instruction instruction) {
-	switch (instruction_format(instruction_type(instruction))) {
-	case R_FORMAT:
-		printf("# V%hX = %02hhx, V%hX = %02hhx", instruction.rformat.rx,
-		       emulator->registers[instruction.rformat.rx], instruction.rformat.ry,
-		       emulator->registers[instruction.rformat.ry]);
-		break;
-	case I_FORMAT:
-		printf("# V%hX = %02hhx", instruction.iformat.reg,
-		       emulator->registers[instruction.iformat.reg]);
-		break;
-	case A_FORMAT:
-	case UNKNOWN_FORMAT:
-		break;
-	}
 }
 
 bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
@@ -1059,14 +556,14 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 		break;
 	}
 	case CHIP8_LD_I_VX:
-		g_written_to_memory = true;
+		g_debug_state.written_to_memory = true;
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			uint16_t addr = emulator->vi + i;
 			emulator->memory[addr] = emulator->registers[i];
-			g_memory_modifications[addr] = true;
-			if (g_memory_breakpoints[addr]) {
-				g_debug = true;
-				g_memory_breakpoint_hit = true;
+			g_debug_state.memory_modifications[addr] = true;
+			if (g_debug_state.memory_breakpoints[addr]) {
+				g_debug_state.debug_mode = true;
+				g_debug_state.memory_breakpoint_hit = true;
 			}
 		}
 		if (emulator->configuration & CONFIG_CHIP8_MEMORY) {
@@ -1077,9 +574,9 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			uint16_t addr = emulator->vi + i;
 			emulator->registers[i] = emulator->memory[addr];
-			if (g_memory_breakpoints[addr]) {
-				g_debug = true;
-				g_memory_breakpoint_hit = true;
+			if (g_debug_state.memory_breakpoints[addr]) {
+				g_debug_state.debug_mode = true;
+				g_debug_state.memory_breakpoint_hit = true;
 			}
 		}
 		if (emulator->configuration & CONFIG_CHIP8_MEMORY) {
@@ -1094,6 +591,564 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 	}
 
 	return true;
+}
+
+void handle_timers(EmulatorState *emulator) {
+	// TODO: Handle timers in debug mode
+	if (emulator->dt > 0) {
+		emulator->dt--;
+	}
+	if (emulator->st > 0) {
+		emulator->st--;
+		if (!g_debug_state.debug_mode) {
+			beeper_state(true);
+		}
+	} else {
+		beeper_state(false);
+	}
+}
+
+bool handle_input(EmulatorState *emulator) {
+	SDL_Event e;
+	nk_input_begin(g_ctx);
+	while (SDL_PollEvent(&e)) {
+		if (e.type == SDL_QUIT ||
+		    e.type == SDL_KEYDOWN && e.key.keysym.scancode == SDL_SCANCODE_ESCAPE) {
+			printf("Quitting...\n");
+			return false;
+		}
+
+		if (!g_inside_text_input) {
+			switch (e.type) {
+			case SDL_KEYUP: {
+				update_keyboard_state(emulator, e.key.keysym.scancode, 0);
+				break;
+			}
+			case SDL_KEYDOWN: {
+				switch (e.key.keysym.scancode) {
+				case SDL_SCANCODE_SPACE:
+					g_debug_state.debug_mode = !g_debug_state.debug_mode;
+					printf("%s emulator\n",
+					       g_debug_state.debug_mode ? "Paused" : "Unpaused");
+					break;
+				case SDL_SCANCODE_G:
+					g_debug_state.skip_breakpoints =
+						!g_debug_state.skip_breakpoints;
+					break;
+				case SDL_SCANCODE_H:
+					g_show_debug_ui = !g_show_debug_ui;
+					break;
+				case SDL_SCANCODE_N:
+					if (g_debug_state.debug_mode) {
+						execute(emulator, fetch_next(emulator, true));
+					}
+					break;
+				default:
+					update_keyboard_state(emulator, e.key.keysym.scancode, 1);
+					break;
+				}
+				break;
+			}
+			}
+		}
+		nk_sdl_handle_event(&e);
+	}
+	nk_input_end(g_ctx);
+
+	return true;
+}
+
+void update_keyboard_state(EmulatorState *emulator, SDL_Scancode scancode, uint8_t state) {
+	bool keypad_pressed = true;
+	switch (scancode) {
+	case SDL_SCANCODE_1:
+		emulator->keyboard[0x1] = state;
+		break;
+	case SDL_SCANCODE_2:
+		emulator->keyboard[0x2] = state;
+		break;
+	case SDL_SCANCODE_3:
+		emulator->keyboard[0x3] = state;
+		break;
+	case SDL_SCANCODE_4:
+		emulator->keyboard[0xC] = state;
+		break;
+	case SDL_SCANCODE_Q:
+		emulator->keyboard[0x4] = state;
+		break;
+	case SDL_SCANCODE_W:
+		emulator->keyboard[0x5] = state;
+		break;
+	case SDL_SCANCODE_E:
+		emulator->keyboard[0x6] = state;
+		break;
+	case SDL_SCANCODE_R:
+		emulator->keyboard[0xD] = state;
+		break;
+	case SDL_SCANCODE_A:
+		emulator->keyboard[0x7] = state;
+		break;
+	case SDL_SCANCODE_S:
+		emulator->keyboard[0x8] = state;
+		break;
+	case SDL_SCANCODE_D:
+		emulator->keyboard[0x9] = state;
+		break;
+	case SDL_SCANCODE_F:
+		emulator->keyboard[0xE] = state;
+		break;
+	case SDL_SCANCODE_Z:
+		emulator->keyboard[0xA] = state;
+		break;
+	case SDL_SCANCODE_X:
+		emulator->keyboard[0x0] = state;
+		break;
+	case SDL_SCANCODE_C:
+		emulator->keyboard[0xB] = state;
+		break;
+	case SDL_SCANCODE_V:
+		emulator->keyboard[0xF] = state;
+		break;
+	default:
+		keypad_pressed = false;
+		break;
+	}
+}
+
+void render(EmulatorState *emulator) {
+	SDL_SetRenderDrawColor(g_renderer, 0x00, 0x05, 0x00, 0xFF);
+	SDL_RenderClear(g_renderer);
+
+	const int emu_scale = 10;
+	const int emu_width = TARGET_WIDTH * emu_scale;
+	const int emu_height = TARGET_HEIGHT * emu_scale;
+	int emu_x = 0;
+	int emu_y = 0;
+
+	// TODO: Handle window resizing whilst maintaining aspect ratio of emulator
+	// display
+	// TODO: Scale and resize emulator display dynamically
+	// TODO: Change pixel colours
+	// TODO: Shows sprites in memory
+	// TODO: Save and load emulator state (snapshots)
+	// TODO: Call graph
+	// TODO: Decompiler output
+	// TODO: Audio waveform
+	if (g_show_debug_ui) {
+		const int window_flags = NK_WINDOW_BORDER | NK_WINDOW_TITLE |
+					 NK_WINDOW_NO_SCROLLBAR;
+		const int window_width = SCREEN_WIDTH;
+		const int window_height = 800;
+		SDL_SetWindowSize(g_window, window_width, window_height);
+
+		struct nk_color active_colour = { 230, 150, 150, 255 };
+		struct nk_color error_colour = { 255, 80, 80, 255 };
+		struct nk_color pc_colour = { 80, 80, 85, 255 };
+
+		// Bounding boxes
+		struct nk_rect emu_config_rect = nk_rect(0, 0, 250, 250);
+		struct nk_rect stack_rect =
+			nk_rect(0, emu_config_rect.y + emu_config_rect.h, emu_config_rect.w, 310);
+		struct nk_rect memory_rect = nk_rect(0, stack_rect.y + stack_rect.h, 630,
+						     window_height - stack_rect.y - stack_rect.h);
+		struct nk_rect registers_rect =
+			nk_rect(emu_config_rect.x + emu_config_rect.w, emu_config_rect.y, 650, 239);
+		struct nk_rect disasm_rect =
+			nk_rect(registers_rect.x + registers_rect.w, registers_rect.y,
+				window_width - registers_rect.x - registers_rect.w, window_height);
+		struct nk_rect debug_rect = nk_rect(memory_rect.x + memory_rect.w, memory_rect.y,
+						    disasm_rect.x - memory_rect.x - memory_rect.w,
+						    memory_rect.h);
+
+		emu_x = registers_rect.x + (registers_rect.w - emu_width) / 2;
+		emu_y = registers_rect.y + registers_rect.h;
+
+		int default_line_height = 30;
+
+		if (nk_begin(g_ctx, "Emulator Configuration", emu_config_rect, window_flags)) {
+			nk_bool vf_reset = emulator->configuration & CONFIG_CHIP8_VF_RESET;
+			nk_bool disp_wait = emulator->configuration & CONFIG_CHIP8_DISP_WAIT;
+			nk_bool shifting = emulator->configuration & CONFIG_CHIP8_SHIFTING;
+			nk_bool clipping = emulator->configuration & CONFIG_CHIP8_CLIPPING;
+			nk_bool jumping = emulator->configuration & CONFIG_CHIP8_JUMPING;
+			nk_bool memory = emulator->configuration & CONFIG_CHIP8_MEMORY;
+
+			nk_layout_row_dynamic(g_ctx, default_line_height, 2);
+			if (nk_checkbox_label(g_ctx, "VF Reset", &vf_reset)) {
+				emulator->configuration ^= CONFIG_CHIP8_VF_RESET;
+			}
+			if (nk_checkbox_label(g_ctx, "Display Wait", &disp_wait)) {
+				emulator->configuration ^= CONFIG_CHIP8_DISP_WAIT;
+			}
+			if (nk_checkbox_label(g_ctx, "Clipping", &clipping)) {
+				emulator->configuration ^= CONFIG_CHIP8_CLIPPING;
+			}
+			if (nk_checkbox_label(g_ctx, "Shifting", &shifting)) {
+				emulator->configuration ^= CONFIG_CHIP8_SHIFTING;
+			}
+			if (nk_checkbox_label(g_ctx, "Jumping", &jumping)) {
+				emulator->configuration ^= CONFIG_CHIP8_JUMPING;
+			}
+			if (nk_checkbox_label(g_ctx, "Memory", &memory)) {
+				emulator->configuration ^= CONFIG_CHIP8_MEMORY;
+			}
+
+			int selected_cpf = emulator->cycles_per_frame;
+			nk_layout_row_dynamic(g_ctx, default_line_height, 2);
+			nk_label(g_ctx, "Cycles/frame", NK_TEXT_LEFT);
+			nk_combobox(g_ctx, CYCLES_PER_FRAME_STR,
+				    sizeof(CYCLES_PER_FRAME) / sizeof(int), &selected_cpf, 20,
+				    nk_vec2(100, 225));
+			emulator->cycles_per_frame = selected_cpf;
+
+			nk_layout_row_dynamic(g_ctx, 10, 1);
+			nk_spacer(g_ctx);
+
+			nk_layout_row_dynamic(g_ctx, 20, 1);
+			nk_label(g_ctx, "Volume", NK_TEXT_LEFT);
+			static float volume = -1;
+			if (volume == -1) {
+				volume = (float)g_beeper.volume;
+			}
+			nk_slider_float(g_ctx, 0, &volume, 1, 0.1);
+			g_beeper.volume = volume;
+		}
+		nk_end(g_ctx);
+
+		if (nk_begin(g_ctx, "Stack", stack_rect, window_flags)) {
+			nk_layout_row_dynamic(g_ctx, default_line_height, 2);
+			for (int i = 0; i < EMULATOR_STACK_SIZE; ++i) {
+				struct nk_color colour = g_ctx->style.text.color;
+				if (emulator->sp == i) {
+					g_ctx->style.text.color = active_colour;
+				}
+				nk_labelf(g_ctx, NK_TEXT_LEFT, "[%X] 0x%02hx", i,
+					  emulator->stack[i]);
+				g_ctx->style.text.color = colour;
+			}
+		}
+		nk_end(g_ctx);
+
+		if (nk_begin(g_ctx, "Memory", memory_rect, window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
+			// TODO: Scroll memory into view when it hits a breakpoint
+			// TODO: Jump to PC button
+			// TODO: Jump to address from text field
+			char byte_str[3] = { 0 };
+			char ascii[17] = { 0 };
+			int x = 0;
+			int y = 10;
+			int char_width = 11;
+			int byte_width = 23;
+			int addr_width = 50;
+			int ascii_width = 130;
+			int line_height = 30;
+			char header_offsets[] = "0123456789ABCDEF";
+
+			// Header
+			nk_layout_space_begin(g_ctx, NK_STATIC, 0, 18);
+			nk_layout_space_push(g_ctx, nk_rect(x, y, addr_width, line_height));
+			nk_labelf(g_ctx, NK_TEXT_LEFT, "Addr");
+			x += addr_width;
+			for (int i = 0; i < 16; ++i) {
+				nk_layout_space_push(g_ctx, nk_rect(x, y, byte_width, line_height));
+				nk_text(g_ctx, header_offsets + i, 1, NK_TEXT_CENTERED);
+				x += byte_width;
+			}
+			x += 10;
+			nk_layout_space_push(g_ctx, nk_rect(x, y, 50, line_height));
+			nk_labelf(g_ctx, NK_TEXT_LEFT, "ASCII");
+
+			// Hexdump
+			nk_layout_space_begin(g_ctx, NK_STATIC, 0, 33);
+			for (uint16_t i = 0; i < EMULATOR_MEMORY_SIZE; ++i) {
+				char byte = ((char *)emulator->memory)[i];
+				if (isprint(byte)) {
+					ascii[i % 16] = byte;
+				} else {
+					ascii[i % 16] = '.';
+				}
+
+				if (i % 16 == 0) {
+					x = 0;
+					nk_layout_space_push(g_ctx, nk_rect(x, y, addr_width,
+									    line_height));
+					nk_labelf(g_ctx, NK_TEXT_LEFT, "0x%03hx", i);
+					x += addr_width;
+				}
+
+				snprintf(byte_str, sizeof(byte_str), "%02hx", byte);
+				nk_layout_space_push(g_ctx, nk_rect(x, y, byte_width, line_height));
+				nk_selectable_label(g_ctx, byte_str, NK_TEXT_CENTERED,
+						    g_debug_state.memory_breakpoints + i);
+
+				x += byte_width;
+
+				if ((i + 1) % 16 == 0) {
+					x += 10;
+					for (int j = 0; j < sizeof(ascii) - 1; ++j) {
+						nk_layout_space_push(g_ctx,
+								     nk_rect(x, y, char_width,
+									     line_height));
+						nk_selectable_text(
+							g_ctx, ascii + j, 1,
+							NK_TEXT_ALIGN_MIDDLE | NK_TEXT_ALIGN_LEFT,
+							g_debug_state.memory_breakpoints + i - 15 +
+								j);
+						x += char_width;
+					}
+				}
+			}
+			nk_layout_space_end(g_ctx);
+		}
+		nk_end(g_ctx);
+
+		if (nk_begin(g_ctx, "Debug", debug_rect, window_flags)) {
+			// TODO: Conditional breakpoints, e.g., break on all DRW
+			// instructions
+			// TODO: Step in and out of functions
+			// TODO: Separate out debugging logic and state
+			// TODO: Timeless debugging like rr
+			nk_layout_row_dynamic(g_ctx, default_line_height, 2);
+			if (nk_button_label(g_ctx, g_debug_state.debug_mode ? "Resume" : "Pause")) {
+				g_debug_state.debug_mode = !g_debug_state.debug_mode;
+			}
+			if (nk_button_label(g_ctx, "Step")) {
+				execute(emulator, fetch_next(emulator, true));
+			}
+			nk_layout_row_dynamic(g_ctx, default_line_height, 1);
+			nk_checkbox_label(g_ctx, "Ignore BPs", &g_debug_state.skip_breakpoints);
+
+			nk_layout_row_dynamic(g_ctx, default_line_height, 1);
+			if (nk_button_label(g_ctx, "Reset")) {
+				reset_state(emulator);
+			}
+
+			nk_layout_row_dynamic(g_ctx, 3, 1);
+			nk_spacer(g_ctx);
+
+			nk_layout_row_dynamic(g_ctx, default_line_height, 1);
+			static char rom_path[256] = { 0 };
+			static bool invalid = false;
+			static char *error_message = "Invalid file path";
+			if (!*rom_path && emulator->rom_path) {
+				strncpy(rom_path, emulator->rom_path, sizeof(rom_path));
+			}
+
+			nk_flags flags = nk_edit_string_zero_terminated(
+				g_ctx, NK_EDIT_SIMPLE, rom_path, sizeof(rom_path), NULL);
+
+			g_inside_text_input = (flags & 0x1) > 0;
+
+			if (nk_button_label(g_ctx, "Load ROM")) {
+				if (*rom_path) {
+					if (access(rom_path, F_OK) != -1) {
+						size_t rom_size;
+						uint8_t *rom = read_rom(rom_path, &rom_size);
+						load_rom(emulator, rom, rom_size, rom_path);
+						invalid = false;
+					} else {
+						invalid = true;
+						if (errno == ENOENT) {
+							error_message = "File does not exist";
+						} else if (errno == EACCES) {
+							error_message = "File is not accessible";
+						} else {
+							error_message = "Error accessing file";
+						}
+					}
+				} else {
+					invalid = true;
+					error_message = "Please enter a file path";
+				}
+			}
+			if (invalid) {
+				struct nk_color colour = g_ctx->style.text.color;
+				g_ctx->style.text.color = error_colour;
+				nk_label(g_ctx, error_message, NK_TEXT_LEFT);
+				g_ctx->style.text.color = colour;
+			}
+		}
+		nk_end(g_ctx);
+
+		if (nk_begin(g_ctx, "Registers", registers_rect, window_flags)) {
+			nk_layout_row_dynamic(g_ctx, default_line_height, 4);
+			for (int i = 0; i < sizeof(emulator->registers); ++i) {
+				nk_labelf(g_ctx, NK_TEXT_LEFT, "V%X = 0x%02hx", i,
+					  emulator->registers[i]);
+			}
+			nk_layout_row_dynamic(g_ctx, default_line_height, 4);
+			nk_labelf(g_ctx, NK_TEXT_LEFT, "PC = 0x%04hx", emulator->pc);
+			nk_labelf(g_ctx, NK_TEXT_LEFT, "VI = 0x%04hx", emulator->vi);
+			nk_labelf(g_ctx, NK_TEXT_LEFT, "SP = 0x%02hx", emulator->sp);
+			nk_layout_row_dynamic(g_ctx, default_line_height, 4);
+			nk_labelf(g_ctx, NK_TEXT_LEFT, "ST = 0x%02hx", emulator->st);
+			nk_labelf(g_ctx, NK_TEXT_LEFT, "DT = 0x%02hx", emulator->dt);
+		}
+		nk_end(g_ctx);
+
+		if (nk_begin(g_ctx, "Disassembly", disasm_rect,
+			     window_flags ^ NK_WINDOW_NO_SCROLLBAR)) {
+			// TODO: Replace with a list view-like setup. Nuklear groups?
+			struct nk_window *win = g_ctx->current;
+			nk_layout_row_dynamic(g_ctx, 20, 1);
+			char text[64] = { 0 };
+			g_ctx->style.selectable.text_normal_active = active_colour;
+			g_ctx->style.selectable.text_hover_active = active_colour;
+			g_ctx->style.selectable.text_hover = active_colour;
+
+			size_t skipped = 0;
+			bool blanked = false;
+			for (uint16_t ip = 0; ip < g_debug_state.disassembly.abook_length; ++ip) {
+				AddressLookup *lookup = &g_debug_state.disassembly.addressbook[ip];
+				if (lookup->type != ADDR_INSTRUCTION) {
+					skipped++;
+					continue;
+				}
+
+				if (skipped > 1 && !blanked) {
+					blanked = true;
+					nk_labelf(g_ctx, NK_TEXT_LEFT,
+						  "===== 0x%03zx BYTES OF DATA =====",
+						  skipped - 1); // Ignore INST_HALF
+				}
+
+				blanked = false;
+				skipped = 0;
+
+				DisassembledInstruction *instruction =
+					&g_debug_state.disassembly
+						 .instruction_blocks[lookup->block_offset]
+						 .instructions[lookup->array_offset];
+
+				static uint16_t prev_pc = 0;
+				snprintf(text, sizeof(text), "0x%08hx  %s",
+					 instruction->address + g_debug_state.disassembly.base,
+					 instruction->asm_str);
+
+				// Highlight instructions with breakpoints
+				struct nk_color colour = g_ctx->style.selectable.normal.data.color;
+				if (emulator->pc ==
+				    instruction->address + g_debug_state.disassembly.base) {
+					g_ctx->style.selectable.normal.data.color = pc_colour;
+
+					if (emulator->pc != prev_pc) {
+						long target =
+							(int)win->layout->at_y - SCREEN_HEIGHT / 2;
+						target = target < 0 ? 0 : target;
+						win->scrollbar.y = target;
+						prev_pc = emulator->pc;
+					}
+				}
+
+				uint16_t addr = g_debug_state.disassembly.base + ip;
+				if (nk_selectable_label(g_ctx, text, NK_TEXT_LEFT,
+							g_debug_state.instruction_breakpoints +
+								addr)) {
+					printf("Breakpoint %s @ 0x%hx!\n",
+					       g_debug_state.instruction_breakpoints[addr] ?
+						       "enabled" :
+						       "disabled",
+					       addr);
+					fflush(stdout);
+				}
+				g_ctx->style.selectable.normal.data.color = colour;
+			}
+		}
+		nk_end(g_ctx);
+	} else {
+		SDL_SetWindowSize(g_window, SCREEN_WIDTH, SCREEN_HEIGHT);
+	}
+
+	SDL_SetRenderTarget(g_renderer, g_texture);
+	SDL_UpdateTexture(g_texture, NULL, emulator->display, TARGET_WIDTH * sizeof(uint32_t));
+
+	SDL_SetRenderTarget(g_renderer, NULL);
+	SDL_RenderClear(g_renderer);
+	if (g_show_debug_ui) {
+		int window_w, window_h;
+		SDL_GetWindowSize(g_window, &window_w, &window_h);
+		SDL_Rect display_rect = { emu_x, emu_y, emu_width, emu_height };
+		SDL_RenderCopy(g_renderer, g_texture, NULL, &display_rect);
+	} else {
+		SDL_RenderCopy(g_renderer, g_texture, NULL, NULL);
+	}
+
+	nk_sdl_render(NK_ANTI_ALIASING_ON);
+
+	SDL_RenderPresent(g_renderer);
+}
+
+static void beeper_callback(void *userdata, uint8_t *_stream, int _len) {
+	// Sawtooth beeper
+	const double attack_release_time = 0.005;
+
+	int16_t *stream = (int16_t *)_stream;
+	int len = _len / sizeof(int16_t);
+
+	double attack_release_delta = g_beeper.volume / (attack_release_time * g_beeper.spec.freq);
+	double phase_increment = 2.0 * g_beeper.frequency / g_beeper.spec.freq;
+
+	for (int sample = 0; sample < len; ++sample) {
+		g_beeper.phase += phase_increment;
+		if (g_beeper.phase >= 1.0)
+			g_beeper.phase -= 2.0;
+
+		if (g_beeper.in_attack) {
+			g_beeper.current_volume += attack_release_delta;
+			if (g_beeper.current_volume >= g_beeper.volume) {
+				g_beeper.current_volume = g_beeper.volume;
+				g_beeper.in_attack = false;
+			}
+		}
+
+		if (g_beeper.in_release) {
+			g_beeper.current_volume -= attack_release_delta;
+			if (g_beeper.current_volume <= 0.0) {
+				g_beeper.current_volume = 0.0;
+				g_beeper.in_release = false;
+				SDL_PauseAudioDevice(g_beeper.id, 1);
+			}
+		}
+
+		stream[sample] = g_beeper.phase * g_beeper.current_volume * INT16_MAX / 2.0;
+	}
+}
+
+void beeper_state(bool on) {
+	if (!g_beeper.on && on) {
+		g_beeper.on = true;
+		g_beeper.in_attack = true;
+		g_beeper.in_release = false;
+		g_beeper.current_volume = 0.0;
+		SDL_PauseAudioDevice(g_beeper.id, 0);
+	} else if (g_beeper.on && !on) {
+		g_beeper.on = false;
+		g_beeper.in_attack = false;
+		g_beeper.in_release = true;
+	}
+}
+
+void load_rom(EmulatorState *emulator, uint8_t *rom, size_t rom_size, char *rom_path) {
+	printf("[*] Loading ROM @ %s\n", rom_path);
+	if (emulator->rom) {
+		free(emulator->rom);
+	}
+	if (emulator->rom_path) {
+		free(emulator->rom_path);
+	}
+
+	if (rom_path) {
+		size_t path_len = strlen(rom_path);
+		emulator->rom_path = malloc(path_len);
+		memcpy(emulator->rom_path, rom_path, path_len);
+	} else {
+		emulator->rom_path = NULL;
+	}
+
+	emulator->rom = rom;
+	emulator->rom_size = rom_size;
+
+	reset_state(emulator);
 }
 
 void init_graphics() {
@@ -1132,7 +1187,7 @@ void init_graphics() {
 						      SDL_TEXTUREACCESS_TARGET, TARGET_WIDTH,
 						      TARGET_HEIGHT);
 
-			g_nk_ctx = nk_sdl_init(g_window, g_renderer);
+			g_ctx = nk_sdl_init(g_window, g_renderer);
 			{
 				struct nk_font_atlas *atlas;
 				struct nk_font_config config = nk_font_config(0);
@@ -1143,24 +1198,156 @@ void init_graphics() {
 				nk_sdl_font_stash_end();
 
 				font->handle.height /= font_scale;
-				nk_style_set_font(g_nk_ctx, &font->handle);
+				nk_style_set_font(g_ctx, &font->handle);
 			}
-		}
 
-		SDL_AudioSpec spec = { 0 };
-
-		spec.freq = 44100;
-		spec.samples = 2048;
-		spec.channels = 1;
-		spec.format = AUDIO_S16;
-		spec.callback = beeper_callback;
-		g_beeper_id = SDL_OpenAudioDevice(NULL, 0, &spec, &g_beeper_spec, 0);
-
-		if (g_beeper_id == 0) {
-			SDL_Log("Failed to open audio device: %s", SDL_GetError());
-			// TODO: Handle error
+			init_beeper(&g_beeper);
 		}
 	}
+}
+
+void init_beeper(BeeperState *beeper) {
+	beeper->volume = 0.1;
+	beeper->current_volume = 0.0;
+	beeper->frequency = 261.63;
+	beeper->phase = 0.0;
+	beeper->in_attack = false;
+	beeper->in_release = false;
+	beeper->on = false;
+
+	SDL_AudioSpec spec = {
+		.freq = 44100,
+		.samples = 2048,
+		.channels = 1,
+		.format = AUDIO_S16,
+		.callback = beeper_callback,
+	};
+
+	beeper->id = SDL_OpenAudioDevice(NULL, 0, &spec, &beeper->spec, 0);
+
+	if (beeper->id == 0) {
+		SDL_Log("Failed to open audio device: %s", SDL_GetError());
+		// TODO: Handle error
+	}
+}
+
+void print_instruction_state(EmulatorState *emulator, Chip8Instruction instruction) {
+	switch (instruction_format(instruction_type(instruction))) {
+	case R_FORMAT:
+		printf("# V%hX = %02hhx, V%hX = %02hhx", instruction.rformat.rx,
+		       emulator->registers[instruction.rformat.rx], instruction.rformat.ry,
+		       emulator->registers[instruction.rformat.ry]);
+		break;
+	case I_FORMAT:
+		printf("# V%hX = %02hhx", instruction.iformat.reg,
+		       emulator->registers[instruction.iformat.reg]);
+		break;
+	case A_FORMAT:
+	case UNKNOWN_FORMAT:
+		break;
+	}
+}
+
+void dump_registers(EmulatorState *emulator) {
+	fprintf(stderr, "===== REGISTERS DUMP ====\n");
+	for (int i = 0; i < sizeof(emulator->registers); ++i) {
+		fprintf(stderr, "V%X = 0x%02hx  ", i, emulator->registers[i]);
+		if ((i + 1) % 4 == 0) {
+			fprintf(stderr, "\n");
+		}
+	}
+	fprintf(stderr, "SP = 0x%02hx  ", emulator->sp);
+	fprintf(stderr, "DT = 0x%02hx  ", emulator->dt);
+	fprintf(stderr, "ST = 0x%02hx\n", emulator->st);
+	fprintf(stderr, "VI = 0x%04hx\n", emulator->vi);
+	fprintf(stderr, "PC = 0x%04hx\n", emulator->pc);
+}
+
+void dump_stack(EmulatorState *emulator) {
+	fprintf(stderr, "\n===== STACK DUMP ====\n");
+	for (int i = 0; i < EMULATOR_STACK_SIZE; ++i) {
+		fprintf(stderr, "[%02hhd] = 0x%03hx  ", i, emulator->stack[i]);
+		if (i == emulator->sp) {
+			printf("<-- SP  ");
+		}
+
+		if ((i + 1) % 2 == 0) {
+			printf("\n");
+		}
+	}
+}
+
+static inline void dump_memory(EmulatorState *emulator) {
+	fprintf(stderr, "\n===== MEMORY DUMP ====\n");
+	if (!g_debug_state.latest_memory_dump) {
+		refresh_dump(emulator);
+	}
+	printf("%s\n", g_debug_state.latest_memory_dump);
+}
+
+void refresh_dump(EmulatorState *emulator) {
+	if (g_debug_state.written_to_memory || !g_debug_state.latest_memory_dump) {
+		if (g_debug_state.latest_memory_dump) {
+			free(g_debug_state.latest_memory_dump);
+		}
+		g_debug_state.latest_memory_dump =
+			hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
+		g_debug_state.written_to_memory = false;
+	}
+}
+
+void dump_state(EmulatorState *emulator) {
+	dump_registers(emulator);
+	dump_stack(emulator);
+	// dump_memory(emulator);
+}
+
+void reset_state(EmulatorState *emulator) {
+	free_disassembly(&g_debug_state.disassembly);
+
+	char *rom_path = emulator->rom_path;
+	uint8_t *rom = emulator->rom;
+	size_t rom_size = emulator->rom_size;
+	size_t config = emulator->configuration;
+	size_t cycles_per_frame = emulator->cycles_per_frame;
+
+	memset(emulator, 0, sizeof(*emulator));
+
+	emulator->rom_path = rom_path;
+	emulator->rom = rom;
+	emulator->rom_size = rom_size;
+	emulator->configuration = config;
+	emulator->cycles_per_frame = cycles_per_frame;
+	emulator->pc = PROG_BASE;
+
+	const uint8_t emulator_fonts[80] = {
+		// https://tobiasvl.github.io/blog/write-a-chip-8-emulator/#fx29-font-character
+		0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
+		0x20, 0x60, 0x20, 0x20, 0x70, // 1
+		0xF0, 0x10, 0xF0, 0x80, 0xF0, // 2
+		0xF0, 0x10, 0xF0, 0x10, 0xF0, // 3
+		0x90, 0x90, 0xF0, 0x10, 0x10, // 4
+		0xF0, 0x80, 0xF0, 0x10, 0xF0, // 5
+		0xF0, 0x80, 0xF0, 0x90, 0xF0, // 6
+		0xF0, 0x10, 0x20, 0x40, 0x40, // 7
+		0xF0, 0x90, 0xF0, 0x90, 0xF0, // 8
+		0xF0, 0x90, 0xF0, 0x10, 0xF0, // 9
+		0xF0, 0x90, 0xF0, 0x90, 0x90, // A
+		0xE0, 0x90, 0xE0, 0x90, 0xE0, // B
+		0xF0, 0x80, 0x80, 0x80, 0xF0, // C
+		0xE0, 0x90, 0x90, 0x90, 0xE0, // D
+		0xF0, 0x80, 0xF0, 0x80, 0xF0, // E
+		0xF0, 0x80, 0xF0, 0x80, 0x80, // F
+	};
+
+	memcpy(emulator->memory + FONT_BASE_ADDR, emulator_fonts, sizeof(emulator_fonts));
+
+	memcpy(emulator->memory + PROG_BASE, emulator->rom, emulator->rom_size);
+
+	g_debug_state.written_to_memory = false;
+	g_debug_state.latest_memory_dump = hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
+	g_debug_state.disassembly = disassemble_rd(emulator->memory + PROG_BASE,
+						   EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE);
 }
 
 void free_emulator(EmulatorState *emulator) {
@@ -1169,85 +1356,11 @@ void free_emulator(EmulatorState *emulator) {
 	}
 }
 
-void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
-	printf("Emulating!\n");
-
-	EmulatorState emulator = { 0 };
-	emulator.configuration = CONFIG_CHIP8;
-	// emulator.configuration ^= CONFIG_CHIP8_DISP_WAIT;
-	emulator.cycles_per_frame = DEFAULT_CYCLES_PER_FRAME;
-
-	srand(time(NULL));
-	load_rom(&emulator, rom, rom_size, rom_path);
-	init_graphics();
-
-	struct timespec start, current;
-	long long frame_time = NANOSECONDS_PER_SECOND / TARGET_HZ;
-	long long elapsed_time;
-
-	if (debug) {
-		g_debug = true;
-		g_show_debug_ui = true;
-		printf("Debugging enabled!\n");
-		printf("  - <SPACE> to pause/unpause\n");
-		printf("  - <H> to toggle debug UI\n");
-		printf("  - <N> to step (execute the next instruction)\n");
-	}
-
-	bool running = true;
-	while (running) {
-		running = handle_input(&emulator);
-		clock_gettime(CLOCK_MONOTONIC, &start);
-
-		if (g_memory_breakpoint_hit) {
-			printf("Memory breakpoint hit!\n");
-			g_memory_breakpoint_hit = false;
-		}
-
-		if (!g_debug) {
-			for (int cycle = 0;
-			     cycle < CYCLES_PER_FRAME[emulator.cycles_per_frame] && running;
-			     ++cycle) {
-				running = handle_input(&emulator);
-				if (!g_skip_breakpoints && g_instruction_breakpoints[emulator.pc] &&
-				    !g_inst_breakpoint_hit) {
-					g_inst_breakpoint_hit = true;
-					g_debug = true;
-					printf("Hit breakpoint @ 0x%03hx\n", emulator.pc);
-					break;
-				}
-
-				g_inst_breakpoint_hit = false;
-
-				Chip8Instruction instruction = fetch_next(&emulator, false);
-				if (!execute(&emulator, instruction)) {
-					dump_state(&emulator);
-					g_debug = true;
-					printf("\n[!] Something went wrong @ 0x%03hx: ",
-					       emulator.pc - 2);
-					char *asm_str = inst2str(instruction);
-					printf("%s\n", asm_str);
-					free(asm_str);
-				}
-				if (emulator.display_interrupted || g_memory_breakpoint_hit) {
-					break;
-				}
-			}
-
-			if (!g_inst_breakpoint_hit) {
-				handle_timers(&emulator);
-			}
-		}
-
-		render(&emulator);
-
-		do { // Lock to TARGET_HZ
-			clock_gettime(CLOCK_MONOTONIC, &current);
-			elapsed_time = (current.tv_sec - start.tv_sec) * NANOSECONDS_PER_SECOND +
-				       (current.tv_nsec - start.tv_nsec);
-		} while (elapsed_time < frame_time);
-	}
-
-	cleanup();
-	free_emulator(&emulator);
+void free_graphics() {
+	nk_sdl_shutdown();
+	SDL_DestroyTexture(g_texture);
+	SDL_DestroyRenderer(g_renderer);
+	SDL_DestroyWindow(g_window);
+	SDL_CloseAudioDevice(g_beeper.id);
+	SDL_Quit();
 }
