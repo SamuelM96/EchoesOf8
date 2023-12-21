@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 			free(buffer);
 		} else if (strcmp(argv[2], "recursive") == 0) {
 			buffer = read_rom(argv[3], &buffer_size);
-			Disassembly disassembly = disassemble_rd(buffer, buffer_size, PROG_BASE);
+			Disassembly disassembly = disassemble_rd(buffer, buffer_size, PROG_BASE, 0);
 			sds disasm_str = disassembly2str(&disassembly);
 			printf("%s\n", disasm_str);
 			sdsfree(disasm_str);

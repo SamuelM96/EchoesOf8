@@ -290,16 +290,16 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 	uint16_t addr = emulator->pc;
 
 	DebugState *debug_state = &emulator->debug_state;
+	Disassembly *disassembly = &debug_state->disassembly;
 
 	Chip8Instruction instruction = bytes2inst(&emulator->memory[addr]);
 
 	// TODO: Process modified instruction before breakpoint handling
 	bool modified = debug_state->memory_modifications[addr];
 	if (modified || addr != prev_inst_addr && trace) {
-		AddressLookup *lookup =
-			&debug_state->disassembly.addressbook[addr - debug_state->disassembly.base];
+		AddressLookup *lookup = &disassembly->addressbook[addr - disassembly->base];
 		DisassembledInstruction *disasm =
-			&debug_state->disassembly.instruction_blocks[lookup->block_offset]
+			&disassembly->instruction_blocks[lookup->block_offset]
 				 .instructions[lookup->array_offset];
 
 		if (modified) {
@@ -1363,7 +1363,7 @@ void reset_state(EmulatorState *emulator) {
 	emulator->debug_state.latest_memory_dump =
 		hexdump(emulator->memory, EMULATOR_MEMORY_SIZE, 0);
 	emulator->debug_state.disassembly = disassemble_rd(
-		emulator->memory + PROG_BASE, EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE);
+		emulator->memory + PROG_BASE, EMULATOR_MEMORY_SIZE - PROG_BASE, PROG_BASE, 0);
 }
 
 void free_emulator(EmulatorState *emulator) {

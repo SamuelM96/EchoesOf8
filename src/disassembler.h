@@ -50,7 +50,8 @@ typedef struct Disassembly {
 } Disassembly;
 
 sds hexdump(void *buffer, size_t length, size_t base);
-Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base);
+Disassembly disassemble_rd(uint8_t *code, size_t length, size_t base, size_t offset);
+void disassemble_rd_update(Disassembly *disassembly, uint8_t *code, size_t length, size_t offset);
 Disassembly disassemble_linear(uint8_t *code, size_t length, size_t base);
 
 sds disassembly2str(Disassembly *disassembly);
