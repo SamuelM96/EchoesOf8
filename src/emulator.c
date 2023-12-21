@@ -243,18 +243,20 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 			     cycle < CYCLES_PER_FRAME[emulator.cycles_per_frame] && running;
 			     ++cycle) {
 				running = handle_input(&emulator);
+
+				Chip8Instruction instruction = fetch_next(&emulator, false);
 				if (!debug_state->skip_breakpoints &&
-				    debug_state->instruction_breakpoints[emulator.pc] &&
+				    debug_state->instruction_breakpoints[emulator.pc - 2] &&
 				    !debug_state->inst_breakpoint_hit) {
 					debug_state->inst_breakpoint_hit = true;
 					debug_state->debug_mode = true;
+					emulator.pc -= 2;
 					printf("Hit breakpoint @ 0x%03hx\n", emulator.pc);
 					break;
 				}
 
 				debug_state->inst_breakpoint_hit = false;
 
-				Chip8Instruction instruction = fetch_next(&emulator, false);
 				if (!execute(&emulator, instruction)) {
 					dump_state(&emulator);
 					debug_state->debug_mode = true;
@@ -297,7 +299,6 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 
 	Chip8Instruction instruction = bytes2inst(&emulator->memory[addr]);
 
-	// TODO: Process modified instruction before breakpoint handling
 	bool modified = debug_state->memory_modifications[addr];
 	if (modified || addr != prev_inst_addr && trace) {
 		AddressLookup *lookup = &disassembly->addressbook[addr - disassembly->base];
