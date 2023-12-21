@@ -70,3 +70,4 @@ A collection of the resources I used during development that helped a lot.
 - [CHIP-8 test suite](https://github.com/Timendus/chip8-test-suite)
 - [Octo](https://github.com/JohnEarnest/Octo)
 - [Lazy Foo' Productions - Beginning Game Programming v2.0](https://lazyfoo.net/tutorials/SDL/)
+- [Chip-8 Program Pack](https://github.com/dmatlack/chip8/tree/master/roms)
