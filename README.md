@@ -2,6 +2,22 @@
 
 ![Screenshot of EchoesOf8 in debug mode](images/debug_demo.png)
 
+> [!WARNING]
+> This emulator does not support the expanded SUPER CHIP/CHIP-48 instruction set.
+
+## Features
+
+- Full CHIP-8 support, including quirks, graphics, and sound.
+- Quirks can be toggled as needed.
+- The speed of the emulator is adjustable (cycles per frame).
+- Debug UI (press `h` to toggle it, and `space` to pause/unpause).
+- Can load ROMs at runtime and reset the emulator's state.
+- Support for instruction and memory (read/write) breakpoints.
+- Uses recursive descent disassembly and updates it at runtime based on memory  
+  modifications and `JMP V0, addr` instructions.
+- Additional utilities include an assembler, recursive descent and  
+  linear disassemblers, and a hexdumper.
+
 ## Building
 
 ```bash
@@ -45,6 +61,8 @@ e.g., the following keys on a QWERTY layout:
 There are various ROMs you can try in the `tests` folder.
 
 ## Acknowledgements
+
+A collection of the resources I used during development that helped a lot.
 
 - Test ROM from [corax89/chip8-test-rom](https://github.com/corax89/chip8-test-rom)
 - [CHIP-8 Instruction Set](https://github.com/mattmikolay/chip-8/wiki/CHIP%E2%80%908-Instruction-Set)
