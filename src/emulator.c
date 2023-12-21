@@ -318,7 +318,7 @@ Chip8Instruction fetch_next(EmulatorState *emulator, bool trace) {
 		}
 
 		if (trace) {
-			printf("[0x%03hX] => (%04hX) %s\t", emulator->pc, disasm->instruction.raw,
+			printf("[0x%03hX] %04hX => %s\t", emulator->pc, disasm->instruction.raw,
 			       disasm->asm_str);
 			print_instruction_state(emulator, disasm->instruction);
 			printf("\n");
