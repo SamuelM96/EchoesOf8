@@ -210,6 +210,9 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 	load_rom(&emulator, rom, rom_size, rom_path);
 	init_graphics(&emulator);
 
+	// emulator.configuration = CONFIG_CHIP8 ^ CONFIG_CHIP8_DISP_WAIT;
+	// emulator.cycles_per_frame = CPF_1000;
+
 	DebugState *debug_state = &emulator.debug_state;
 
 	struct timespec start, current;
@@ -456,14 +459,19 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 	case CHIP8_LD_I_ADDR:
 		emulator->vi = instruction.aformat.addr;
 		break;
-	case CHIP8_JMP_V0_ADDR:
+	case CHIP8_JMP_V0_ADDR: {
 		if (emulator->configuration & CONFIG_CHIP8_JUMPING) {
 			emulator->pc = instruction.aformat.addr + emulator->registers[0];
 		} else {
 			emulator->pc = instruction.aformat.addr +
 				       emulator->registers[instruction.iformat.reg];
 		}
+		uint16_t addr = emulator->pc;
+		printf("JMP V0 @ 0x%03hx\n", addr);
+		disassemble_rd_update(&debug_state->disassembly, emulator->memory + PROG_BASE,
+				      EMULATOR_MEMORY_SIZE - PROG_BASE, addr - PROG_BASE);
 		break;
+	}
 	case CHIP8_RND_VX_BYTE:
 		emulator->registers[instruction.iformat.reg] = (rand() % 256) &
 							       instruction.iformat.imm;
