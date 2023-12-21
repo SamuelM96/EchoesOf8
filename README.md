@@ -1,5 +1,7 @@
 # EchoesOf8 - A [CHIP-8](https://en.wikipedia.org/wiki/CHIP-8) Emulator
 
+![Screenshot of EchoesOf8 in debug mode](images/debug_demo.png)
+
 ## Building
 
 ```bash
