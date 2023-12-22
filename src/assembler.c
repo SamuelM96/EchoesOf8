@@ -341,15 +341,12 @@ uint8_t *assemble(char *source_filename) {
 				} else {
 					byte |= nibble;
 					arrput(data, 0xff & byte);
-					printf("%d ", byte);
 					byte = 0;
 					first_nibble = true;
 				}
 
 				c++;
 			}
-
-			printf("\n");
 
 			continue;
 		}
@@ -410,10 +407,7 @@ uint8_t *assemble(char *source_filename) {
 		// Patch labels with hardcoded addresses
 		size_t offset = to_patch[i].key;
 		Chip8Instruction instruction = bytes2inst(data + offset);
-		printf("%04hx\n", instruction.raw);
 		instruction.aformat.addr = shgets(labels, to_patch[i].value).value + PROG_BASE;
-		printf("Patching %s to be 0x%hx\n", to_patch[i].value, instruction.aformat.addr);
-		printf("%04hx\n", instruction.raw);
 		data[offset] = (instruction.raw & 0xff00) >> 8;
 		data[offset + 1] = instruction.raw & 0xff;
 	}
