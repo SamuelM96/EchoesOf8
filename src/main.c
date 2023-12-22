@@ -3,6 +3,7 @@
 #include "disassembler.h"
 #include "emulator.h"
 #include "sds.h"
+#include <stdint.h>
 
 #define STB_DS_IMPLEMENTATION
 #include "stb_ds.h"
@@ -86,18 +87,11 @@ int main(int argc, char *argv[]) {
 			return EXIT_FAILURE;
 		}
 
-		Chip8Instruction *instructions = assemble(argv[2]);
+		uint8_t *rom = assemble(argv[2]);
 		FILE *output = fopen(argv[3], "w");
-		for (int i = 0; i < arrlen(instructions); ++i) {
-			Chip8Instruction instruction = instructions[i];
-			uint8_t nibbles[2];
-			nibbles[0] = (instruction.raw & 0xff00) >> 8;
-			nibbles[1] = instruction.raw & 0xff;
-			fwrite((void *)nibbles, sizeof(nibbles[0]), sizeof(nibbles), output);
-		}
-
+		fwrite(rom, sizeof(uint8_t), arrlen(rom), output);
 		fclose(output);
-		arrfree(instructions);
+		arrfree(rom);
 	} else if (strcmp(argv[1], "compile") == 0) {
 		if (argc != 4) {
 			print_usage();
