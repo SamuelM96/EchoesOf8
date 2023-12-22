@@ -171,23 +171,25 @@ Chip8Instruction parse_line(char *line, char **out_label) {
 			}
 		}
 	} else if (strncmp("ADD", opcode, opcode_len) == 0) {
-		if (*args == 'V') {
-			// 8xy4 - ADD Vx, Vy
-			instruction.rformat.opcode = 0x8;
-			instruction.rformat.rx = parse_num(args + 1);
-			args = next_arg(args);
-			instruction.rformat.ry = parse_num(args + 1);
-			instruction.rformat.imm = 0x4;
-		} else if (*args == 'I') {
-			// Fx1E - ADD I, Vx
-			instruction.iformat.opcode = 0xF;
-			instruction.iformat.imm = 0x1E;
-			instruction.iformat.reg = parse_num(next_arg(args) + 1);
+		char *arg2 = next_arg(args);
+		if (*arg2 == 'V') {
+			if (*args == 'V') {
+				// 8xy4 - ADD Vx, Vy
+				instruction.rformat.opcode = 0x8;
+				instruction.rformat.rx = parse_num(args + 1);
+				instruction.rformat.ry = parse_num(arg2 + 1);
+				instruction.rformat.imm = 0x4;
+			} else {
+				// Fx1E - ADD I, Vx
+				instruction.iformat.opcode = 0xF;
+				instruction.iformat.imm = 0x1E;
+				instruction.iformat.reg = parse_num(arg2 + 1);
+			}
 		} else {
 			// 7xkk - ADD Vx, byte
 			instruction.iformat.opcode = 0x7;
 			instruction.iformat.reg = parse_num(args + 1);
-			instruction.iformat.imm = strtol(next_arg(args), NULL, 0);
+			instruction.iformat.imm = strtol(arg2, NULL, 0);
 		}
 	} else if (strncmp("OR", opcode, opcode_len) == 0) {
 		// 8xy1 - OR Vx, Vy
