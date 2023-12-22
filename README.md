@@ -23,11 +23,11 @@
 ```bash
 # Install dependencies
 ## Ubuntu
-sudo apt install libsdl2-dev
+sudo apt install cmake libsdl2-dev
 ## Fedora
-sudo dnf install SDL2-devel
+sudo dnf install cmake SDL2-devel
 ## macOS
-brew install SDL2
+brew install SDL2 cmake
 
 # Build the project
 ./build.sh
@@ -59,6 +59,15 @@ e.g., the following keys on a QWERTY layout:
 | Z | X | C | V |
 
 There are various ROMs you can try in the `tests` folder.
+
+## TODOs
+
+- Implement a compiler for a C-like language.
+- Write a decompiler that decompiles to the above C-like language.
+- Rewrite the assembler to have a proper lexer.
+- Include macro and image loading support in the assembler.
+- Implement the SUPER CHIP/CHIP-48 instructions.
+- Implement dynamic recompilation for fun.
 
 ## Acknowledgements
 

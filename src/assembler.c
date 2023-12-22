@@ -13,6 +13,11 @@
 #define MAX_LINE_LENGTH 1024
 #define MAX_LABEL_LENGTH 256
 
+// NOTE: This would be better structured as a whole by having a
+// lexer to parse out tokens. There's definitely edge cases with
+// the current approach, but it's good enough to produce binaries
+// for now.
+
 static inline char *trim(char *str) {
 	while (isspace((unsigned char)*str))
 		str++;
