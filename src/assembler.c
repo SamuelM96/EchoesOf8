@@ -36,24 +36,25 @@ static inline char *next_arg(char *args) {
 	return trim(args);
 }
 
-int8_t parse_reg(char *arg) {
-	if (*arg != 'V') {
-		return -1;
+int8_t parse_reg(char *arg, size_t line_num, char *line) {
+	int8_t result = -1;
+	if (*arg == 'V') {
+		char reg = tolower(*(arg + 1));
+		if ('a' <= reg && 'f' >= reg) {
+			result = reg - 'a';
+		} else if ('0' <= reg && '9' >= reg) {
+			return reg - '0';
+		}
 	}
 
-	char reg = tolower(*(arg + 1));
-	if ('a' <= reg && 'f' >= reg) {
-		return reg - 'a';
+	if (result == -1) {
+		fprintf(stderr, "[!] Invalid register on line %zu: %s\n", line_num, line);
 	}
 
-	if ('0' <= reg && '9' >= reg) {
-		return reg - '0';
-	}
-
-	return -1;
+	return result;
 }
 
-Chip8Instruction parse_line(char *line, char **out_label) {
+Chip8Instruction parse_line(char *line, size_t line_num, char **out_label) {
 	*out_label = NULL;
 	char *opcode = line;
 	while (!isspace((unsigned char)*opcode)) {
@@ -98,13 +99,13 @@ Chip8Instruction parse_line(char *line, char **out_label) {
 			instruction.aformat.addr = strtol(args, NULL, 0);
 		}
 	} else if (strncmp("SE", opcode, opcode_len) == 0) {
-		uint8_t xreg = parse_reg(args);
+		uint8_t xreg = parse_reg(args, line_num, line);
 		char *arg2 = next_arg(args);
 		if (*arg2 == 'V') {
 			// 5xy0 - SE Vx, Vy
 			instruction.rformat.opcode = 0x5;
 			instruction.rformat.rx = xreg;
-			instruction.rformat.ry = parse_reg(arg2);
+			instruction.rformat.ry = parse_reg(arg2, line_num, line);
 			instruction.rformat.imm = 0x0;
 		} else {
 			// 3xkk - SE Vx, byte
@@ -113,13 +114,13 @@ Chip8Instruction parse_line(char *line, char **out_label) {
 			instruction.iformat.imm = strtol(arg2, NULL, 0);
 		}
 	} else if (strncmp("SNE", opcode, opcode_len) == 0) {
-		uint8_t xreg = parse_reg(args);
+		uint8_t xreg = parse_reg(args, line_num, line);
 		char *arg2 = next_arg(args);
 		if (*arg2 == 'V') {
 			// 9xy0 - SNE Vx, Vy
 			instruction.rformat.opcode = 0x9;
 			instruction.rformat.rx = xreg;
-			instruction.rformat.ry = parse_reg(arg2);
+			instruction.rformat.ry = parse_reg(arg2, line_num, line);
 			instruction.rformat.imm = 0x0;
 		} else {
 			// 4xkk - SNE Vx, byte
@@ -141,34 +142,34 @@ Chip8Instruction parse_line(char *line, char **out_label) {
 			// Fx15 - LD DT, Vx
 			instruction.iformat.opcode = 0xF;
 			instruction.iformat.imm = 0x15;
-			instruction.iformat.reg = parse_reg(next_arg(args));
+			instruction.iformat.reg = parse_reg(next_arg(args), line_num, line);
 		} else if (*args == 'S') {
 			// Fx18 - LD ST, Vx
 			instruction.iformat.opcode = 0xF;
 			instruction.iformat.imm = 0x18;
-			instruction.iformat.reg = parse_reg(next_arg(args));
+			instruction.iformat.reg = parse_reg(next_arg(args), line_num, line);
 		} else if (*args == 'F') {
 			// Fx29 - LD F, Vx
 			instruction.iformat.opcode = 0xF;
 			instruction.iformat.imm = 0x29;
-			instruction.iformat.reg = parse_reg(next_arg(args));
+			instruction.iformat.reg = parse_reg(next_arg(args), line_num, line);
 		} else if (*args == 'B') {
 			// Fx33 - LD B, Vx
 			instruction.iformat.opcode = 0xF;
 			instruction.iformat.imm = 0x33;
-			instruction.iformat.reg = parse_reg(next_arg(args));
+			instruction.iformat.reg = parse_reg(next_arg(args), line_num, line);
 		} else if (*args == '[') {
 			// Fx55 - LD [I], Vx
 			instruction.iformat.opcode = 0xF;
 			instruction.iformat.imm = 0x55;
-			instruction.iformat.reg = parse_reg(next_arg(args));
+			instruction.iformat.reg = parse_reg(next_arg(args), line_num, line);
 		} else if (*args == 'V') {
-			instruction.rformat.rx = parse_reg(args);
+			instruction.rformat.rx = parse_reg(args, line_num, line);
 			char *arg2 = next_arg(args);
 			if (*arg2 == 'V') {
 				// 8xy0 - LD Vx, Vy
 				instruction.rformat.opcode = 0x8;
-				instruction.rformat.ry = parse_reg(arg2);
+				instruction.rformat.ry = parse_reg(arg2, line_num, line);
 			} else if (*arg2 == 'D') {
 				// Fx07 - LD Vx, DT
 				instruction.iformat.opcode = 0xF;
@@ -193,84 +194,84 @@ Chip8Instruction parse_line(char *line, char **out_label) {
 			if (*args == 'V') {
 				// 8xy4 - ADD Vx, Vy
 				instruction.rformat.opcode = 0x8;
-				instruction.rformat.rx = parse_reg(args);
-				instruction.rformat.ry = parse_reg(arg2);
+				instruction.rformat.rx = parse_reg(args, line_num, line);
+				instruction.rformat.ry = parse_reg(arg2, line_num, line);
 				instruction.rformat.imm = 0x4;
 			} else {
 				// Fx1E - ADD I, Vx
 				instruction.iformat.opcode = 0xF;
 				instruction.iformat.imm = 0x1E;
-				instruction.iformat.reg = parse_reg(arg2);
+				instruction.iformat.reg = parse_reg(arg2, line_num, line);
 			}
 		} else {
 			// 7xkk - ADD Vx, byte
 			instruction.iformat.opcode = 0x7;
-			instruction.iformat.reg = parse_reg(args);
+			instruction.iformat.reg = parse_reg(args, line_num, line);
 			instruction.iformat.imm = strtol(arg2, NULL, 0);
 		}
 	} else if (strncmp("OR", opcode, opcode_len) == 0) {
 		// 8xy1 - OR Vx, Vy
 		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args);
-		instruction.rformat.ry = parse_reg(next_arg(args));
+		instruction.rformat.rx = parse_reg(args, line_num, line);
+		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
 		instruction.rformat.imm = 0x1;
 	} else if (strncmp("AND", opcode, opcode_len) == 0) {
 		// 8xy2 - AND Vx, Vy
 		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args);
-		instruction.rformat.ry = parse_reg(next_arg(args));
+		instruction.rformat.rx = parse_reg(args, line_num, line);
+		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
 		instruction.rformat.imm = 0x2;
 	} else if (strncmp("XOR", opcode, opcode_len) == 0) {
 		// 8xy3 - XOR Vx, Vy
 		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args);
-		instruction.rformat.ry = parse_reg(next_arg(args));
+		instruction.rformat.rx = parse_reg(args, line_num, line);
+		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
 		instruction.rformat.imm = 0x3;
 	} else if (strncmp("SUB", opcode, opcode_len) == 0) {
 		// 8xy5 - SUB Vx, Vy
 		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args);
-		instruction.rformat.ry = parse_reg(next_arg(args));
+		instruction.rformat.rx = parse_reg(args, line_num, line);
+		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
 		instruction.rformat.imm = 0x5;
 	} else if (strncmp("SHR", opcode, opcode_len) == 0) {
 		// 8xy6 - SHR Vx {, Vy}
 		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args);
-		instruction.rformat.ry = parse_reg(next_arg(args));
+		instruction.rformat.rx = parse_reg(args, line_num, line);
+		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
 		instruction.rformat.imm = 0x6;
 	} else if (strncmp("SUBN", opcode, opcode_len) == 0) {
 		// 8xy7 - SUBN Vx, Vy
 		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args);
-		instruction.rformat.ry = parse_reg(next_arg(args));
+		instruction.rformat.rx = parse_reg(args, line_num, line);
+		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
 		instruction.rformat.imm = 0x7;
 	} else if (strncmp("SHL", opcode, opcode_len) == 0) {
 		// 8xyE - SHL Vx {, Vy}
 		instruction.rformat.opcode = 8;
-		instruction.rformat.rx = parse_reg(args);
-		instruction.rformat.ry = parse_reg(next_arg(args));
+		instruction.rformat.rx = parse_reg(args, line_num, line);
+		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
 		instruction.rformat.imm = 0xE;
 	} else if (strncmp("RND", opcode, opcode_len) == 0) {
 		// Cxkk - RND Vx, byte
 		instruction.iformat.opcode = 0xC;
-		instruction.iformat.reg = parse_reg(args);
+		instruction.iformat.reg = parse_reg(args, line_num, line);
 		instruction.iformat.imm = strtol(next_arg(args), NULL, 0);
 	} else if (strncmp("DRW", opcode, opcode_len) == 0) {
 		// Dxyn - DRW Vx, Vy, nibble
 		instruction.rformat.opcode = 0xD;
-		instruction.rformat.rx = parse_reg(args);
+		instruction.rformat.rx = parse_reg(args, line_num, line);
 		char *arg2 = next_arg(args);
-		instruction.rformat.ry = parse_reg(arg2);
+		instruction.rformat.ry = parse_reg(arg2, line_num, line);
 		instruction.rformat.imm = parse_num(next_arg(arg2));
 	} else if (strncmp("SKP", opcode, opcode_len) == 0) {
 		// Ex9E - SKP Vx
 		instruction.iformat.opcode = 0xE;
-		instruction.iformat.reg = parse_reg(args);
+		instruction.iformat.reg = parse_reg(args, line_num, line);
 		instruction.iformat.imm = 0x9E;
 	} else if (strncmp("SKNP", opcode, opcode_len) == 0) {
 		// ExA1 - SKNP Vx
 		instruction.iformat.opcode = 0xE;
-		instruction.iformat.reg = parse_reg(args);
+		instruction.iformat.reg = parse_reg(args, line_num, line);
 		instruction.iformat.imm = 0xA1;
 	}
 
@@ -362,7 +363,7 @@ uint8_t *assemble(char *source_filename) {
 		}
 
 		char *label = NULL;
-		Chip8Instruction instruction = parse_line(trimmed_line, &label);
+		Chip8Instruction instruction = parse_line(trimmed_line, line_num, &label);
 		if (!instruction.raw) {
 			char *last_char = trimmed_line;
 			while (!isspace((unsigned char)*last_char)) {
