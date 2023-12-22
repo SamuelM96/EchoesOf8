@@ -47,7 +47,6 @@ int8_t parse_reg(char *arg) {
 	}
 
 	char reg = tolower(*(arg + 1));
-	printf("%s %c\n", arg, reg);
 	if ('a' <= reg && 'f' >= reg) {
 		return reg - 'a';
 	}
