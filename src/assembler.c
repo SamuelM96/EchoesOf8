@@ -13,11 +13,6 @@
 #define MAX_LINE_LENGTH 1024
 #define MAX_LABEL_LENGTH 256
 
-// NOTE: This would be better structured as a whole by having a
-// lexer to parse out tokens. There's definitely edge cases with
-// the current approach, but it's good enough to produce binaries
-// for now.
-
 static inline char *trim(char *str) {
 	while (isspace((unsigned char)*str))
 		str++;
@@ -308,14 +303,11 @@ uint8_t *assemble(char *source_filename) {
 		line_num++;
 		char *trimmed_line = trim(line);
 
-		// TODO: Handle raw hex data
 		if (!*trimmed_line || *trimmed_line == '#') {
 			continue;
 		}
 
 		if (*trimmed_line == '0') {
-			// TODO: Patch labels to point to correct addresses
-			// TODO: Patch instructions to point to addresses
 			if (!last_processed_label) {
 				// Data has no label assigned to it since the last label
 				// was assigned to an instruction, or there is no label
