@@ -82,6 +82,75 @@ static inline Chip8Instruction bytes2inst(uint8_t *bytes) {
 	return instruction;
 }
 
+static inline Chip8Instruction rformat(uint8_t opcode, uint8_t rx, uint8_t ry, uint8_t imm) {
+	Chip8Instruction instruction = { .rformat = {
+						 .opcode = opcode,
+						 .rx = rx,
+						 .ry = ry,
+						 .imm = imm,
+					 } };
+	return instruction;
+}
+
+static inline Chip8Instruction iformat(uint8_t opcode, uint8_t reg, uint8_t imm) {
+	Chip8Instruction instruction = { .iformat = {
+						 .opcode = opcode,
+						 .reg = reg,
+						 .imm = imm,
+					 } };
+	return instruction;
+}
+
+static inline Chip8Instruction aformat(uint8_t opcode, uint16_t addr) {
+	Chip8Instruction instruction = { .aformat = {
+						 .opcode = opcode,
+						 .addr = addr,
+					 } };
+	return instruction;
+}
+
+#define INST_CLS \
+	(Chip8Instruction) { \
+		.raw = 0x00E0 \
+	}
+#define INST_RET \
+	(Chip8Instruction) { \
+		.raw = 0x00E0 \
+	}
+#define INST_SYS_ADDR(addr) aformat(0x0, (addr))
+#define INST_JMP_ADDR(addr) aformat(0x1, (addr))
+#define INST_CALL_ADDR(addr) aformat(0x2, (addr))
+#define INST_SE_VX_BYTE(vx, byte) iformat(0x3, (vx), (byte))
+#define INST_SNE_VX_BYTE(vx, byte) iformat(0x4, (vx), (byte))
+#define INST_SE_VX_VY(vx, vy) rformat(0x5, (rx), (ry), 0x0)
+#define INST_LD_VX_BYTE(vx, byte) iformat(0x6, (vx), (byte))
+#define INST_ADD_VX_BYTE(vx, byte) iformat(0x7, (vx), (byte))
+#define INST_LD_VX_VY(vx, vy) rformat(0x8, (rx), (ry), 0x0)
+#define INST_OR_VX_VY(vx, vy) rformat(0x8, (rx), (ry), 0x1)
+#define INST_AND_VX_VY(vx, vy) rformat(0x8, (rx), (ry), 0x2)
+#define INST_XOR_VX_VY(vx, vy) rformat(0x8, (rx), (ry), 0x3)
+#define INST_ADD_VX_VY(vx, vy) rformat(0x8, (rx), (ry), 0x4)
+#define INST_SUB_VX_VY(vx, vy) rformat(0x8, (rx), (ry), 0x5)
+#define INST_SHR_VX(vx, vy) rformat(0x8, (rx), (ry), 0x6)
+#define INST_SUBN_VX_VY(vx, vy) rformat(0x8, (rx), (ry), 0x7)
+#define INST_SHL_VX(vx, vy) rformat(0x8, (rx), (ry), 0xE)
+#define INST_SNE_VX_VY(vx, vy) rformat(0x9, (rx), (ry), 0x0)
+#define INST_LD_I_ADDR(addr) aformat(0xA, (addr))
+#define INST_JMP_V0_ADDR(addr) aformat(0xB, (addr))
+#define INST_RND_VX_BYTE(vx, byte) iformat(0xC, (vx), (byte))
+#define INST_DRW_VX_VY_NIBBLE(vx, vy, nibble) rformat(0xD, (rx), (ry), (nibble))
+#define INST_SKP_VX(vx) iformat(0xE, (vx), 0x9E)
+#define INST_SKNP_VX(vx) iformat(0xE, (vx), 0xA1)
+#define INST_LD_VX_DT(vx) iformat(0xF, (vx), 0x07)
+#define INST_LD_VX_K(vx) iformat(0xF, (vx), 0x0A)
+#define INST_LD_DT_VX(vx) iformat(0xF, (vx), 0x15)
+#define INST_LD_ST_VX(vx) iformat(0xF, (vx), 0x18)
+#define INST_ADD_I_VX(vx) iformat(0xF, (vx), 0x1E)
+#define INST_LD_F_VX(vx) iformat(0xF, (vx), 0x29)
+#define INST_LD_B_VX(vx) iformat(0xF, (vx), 0x33)
+#define INST_LD_I_VX(vx) iformat(0xF, (vx), 0x55)
+#define INST_LD_VX_I(vx) iformat(0xF, (vx), 0x65)
+
 sds inst2str(Chip8Instruction instruction);
 void print_instruction(Chip8Instruction instruction, Chip8InstructionFormat format);
 Chip8InstructionType instruction_type(Chip8Instruction instruction);
