@@ -30,8 +30,6 @@ void print_instruction(Chip8Instruction instruction, Chip8InstructionFormat form
 
 sds inst2str(Chip8Instruction instruction) {
 	sds buffer = sdsempty();
-	// size_t buffer_len = 16;
-	// char *buffer = malloc(buffer_len);
 
 	switch (instruction_type(instruction)) {
 	case CHIP8_CLS:
@@ -170,67 +168,67 @@ Chip8InstructionType instruction_type(Chip8Instruction instruction) {
 		switch (instruction.aformat.addr) {
 		case 0x000:
 			return CHIP8_UNKNOWN;
-		case 0x0E0:
+		case OP_CLS:
 			return CHIP8_CLS;
-		case 0x0EE:
+		case OP_RET:
 			return CHIP8_RET;
 		default:
 			return CHIP8_SYS_ADDR;
 		}
 		break;
-	case 1:
+	case OP_JMP_ADDR:
 		return CHIP8_JMP_ADDR;
-	case 2:
+	case OP_CALL_ADDR:
 		return CHIP8_CALL_ADDR;
-	case 3:
+	case OP_SE_VX_BYTE:
 		return CHIP8_SE_VX_BYTE;
-	case 4:
+	case OP_SNE_VX_BYTE:
 		return CHIP8_SNE_VX_BYTE;
-	case 5:
+	case OP_SE_VX_VY:
 		return CHIP8_SE_VX_VY;
-	case 6:
+	case OP_LD_VX_BYTE:
 		return CHIP8_LD_VX_BYTE;
-	case 7:
+	case OP_ADD_VX_BYTE:
 		return CHIP8_ADD_VX_BYTE;
 	case 8:
 		switch (instruction.rformat.imm) {
-		case 0:
+		case IMM_LD_VX_VY:
 			return CHIP8_LD_VX_VY;
-		case 1:
+		case IMM_OR_VX_VY:
 			return CHIP8_OR_VX_VY;
-		case 2:
+		case IMM_AND_VX_VY:
 			return CHIP8_AND_VX_VY;
-		case 3:
+		case IMM_XOR_VX_VY:
 			return CHIP8_XOR_VX_VY;
-		case 4:
+		case IMM_ADD_VX_VY:
 			return CHIP8_ADD_VX_VY;
-		case 5:
+		case IMM_SUB_VX_VY:
 			return CHIP8_SUB_VX_VY;
-		case 6:
+		case IMM_SHR_VX:
 			return CHIP8_SHR_VX;
-		case 7:
+		case IMM_SUBN_VX_VY:
 			return CHIP8_SUBN_VX_VY;
-		case 0xE:
+		case IMM_SHL_VX:
 			return CHIP8_SHL_VX;
 		default:
 			return CHIP8_UNKNOWN;
 		}
 		break;
-	case 9:
+	case OP_SNE_VX_VY:
 		return CHIP8_SNE_VX_VY;
-	case 0xA:
+	case OP_LD_I_ADDR:
 		return CHIP8_LD_I_ADDR;
-	case 0xB:
+	case OP_JMP_V0_ADDR:
 		return CHIP8_JMP_V0_ADDR;
-	case 0xC:
+	case OP_RND_VX_BYTE:
 		return CHIP8_RND_VX_BYTE;
-	case 0xD:
+	case OP_DRW_VX_VY_NIBBLE:
 		return CHIP8_DRW_VX_VY_NIBBLE;
 	case 0xE:
 		switch (instruction.iformat.imm) {
-		case 0x9E:
+		case IMM_SKP_VX:
 			return CHIP8_SKP_VX;
-		case 0xA1:
+		case IMM_SKNP_VX:
 			return CHIP8_SKNP_VX;
 		default:
 			return CHIP8_UNKNOWN;
@@ -238,23 +236,23 @@ Chip8InstructionType instruction_type(Chip8Instruction instruction) {
 		break;
 	case 0xF:
 		switch (instruction.iformat.imm) {
-		case 0x07:
+		case IMM_LD_VX_DT:
 			return CHIP8_LD_VX_DT;
-		case 0x0A:
+		case IMM_LD_VX_K:
 			return CHIP8_LD_VX_K;
-		case 0x15:
+		case IMM_LD_DT_VX:
 			return CHIP8_LD_DT_VX;
-		case 0x18:
+		case IMM_LD_ST_VX:
 			return CHIP8_LD_ST_VX;
-		case 0x1E:
+		case IMM_ADD_I_VX:
 			return CHIP8_ADD_I_VX;
-		case 0x29:
+		case IMM_LD_F_VX:
 			return CHIP8_LD_F_VX;
-		case 0x33:
+		case IMM_LD_B_VX:
 			return CHIP8_LD_B_VX;
-		case 0x55:
+		case IMM_LD_I_VX:
 			return CHIP8_LD_I_VX;
-		case 0x65:
+		case IMM_LD_VX_I:
 			return CHIP8_LD_VX_I;
 		default:
 			return CHIP8_UNKNOWN;

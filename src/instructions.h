@@ -4,6 +4,64 @@
 #include "sds.h"
 #include <stdint.h>
 
+#define OP_CLS 0x00E0
+#define OP_RET 0x00EE
+#define OP_SYS_ADDR 0x0
+#define OP_JMP_ADDR 0x1
+#define OP_CALL_ADDR 0x2
+#define OP_SE_VX_BYTE 0x3
+#define OP_SNE_VX_BYTE 0x4
+#define OP_SE_VX_VY 0x5
+#define IMM_SE_VX_VY 0x0
+#define OP_LD_VX_BYTE 0x6
+#define OP_ADD_VX_BYTE 0x7
+#define OP_LD_VX_VY 0x8
+#define IMM_LD_VX_VY 0x0
+#define OP_OR_VX_VY 0x8
+#define IMM_OR_VX_VY 0x1
+#define OP_AND_VX_VY 0x8
+#define IMM_AND_VX_VY 0x2
+#define OP_XOR_VX_VY 0x8
+#define IMM_XOR_VX_VY 0x3
+#define OP_ADD_VX_VY 0x8
+#define IMM_ADD_VX_VY 0x4
+#define OP_SUB_VX_VY 0x8
+#define IMM_SUB_VX_VY 0x5
+#define OP_SHR_VX 0x8
+#define IMM_SHR_VX 0x6
+#define OP_SUBN_VX_VY 0x8
+#define IMM_SUBN_VX_VY 0x7
+#define OP_SHL_VX 0x8
+#define IMM_SHL_VX 0xE
+#define OP_SNE_VX_VY 0x9
+#define IMM_SNE_VX_VY 0x0
+#define OP_LD_I_ADDR 0xA
+#define OP_JMP_V0_ADDR 0xB
+#define OP_RND_VX_BYTE 0xC
+#define OP_DRW_VX_VY_NIBBLE 0xD
+#define OP_SKP_VX 0xE
+#define IMM_SKP_VX 0x9E
+#define OP_SKNP_VX 0xE
+#define IMM_SKNP_VX 0xA1
+#define OP_LD_VX_DT 0xF
+#define IMM_LD_VX_DT 0x07
+#define OP_LD_VX_K 0xF
+#define IMM_LD_VX_K 0x0A
+#define OP_LD_DT_VX 0xF
+#define IMM_LD_DT_VX 0x15
+#define OP_LD_ST_VX 0xF
+#define IMM_LD_ST_VX 0x18
+#define OP_ADD_I_VX 0xF
+#define IMM_ADD_I_VX 0x1E
+#define OP_LD_F_VX 0xF
+#define IMM_LD_F_VX 0x29
+#define OP_LD_B_VX 0xF
+#define IMM_LD_B_VX 0x33
+#define OP_LD_I_VX 0xF
+#define IMM_LD_I_VX 0x55
+#define OP_LD_VX_I 0xF
+#define IMM_LD_VX_I 0x65
+
 // Standard instructions
 typedef enum {
 	CHIP8_CLS, // 00E0
@@ -109,53 +167,47 @@ static inline Chip8Instruction aformat(uint8_t opcode, uint16_t addr) {
 	return instruction;
 }
 
-// TODO: Write some defines for each instruction's opcode and immediate
-// values to have consistency between INST macros and the instruction_type()
-// function? E.g.,
-// #define OP_LD_VX_VY 0x8
-// #define IMM_LD_VX_VY 0x0
-// ...
 #define INST_CLS \
 	(Chip8Instruction) { \
-		.raw = 0x00E0 \
+		.raw = OP_CLS \
 	}
 #define INST_RET \
 	(Chip8Instruction) { \
-		.raw = 0x00EE \
+		.raw = OP_RET \
 	}
-#define INST_SYS_ADDR(addr) aformat(0x0, (addr))
-#define INST_JMP_ADDR(addr) aformat(0x1, (addr))
-#define INST_CALL_ADDR(addr) aformat(0x2, (addr))
-#define INST_SE_VX_BYTE(vx, byte) iformat(0x3, (vx), (byte))
-#define INST_SNE_VX_BYTE(vx, byte) iformat(0x4, (vx), (byte))
-#define INST_SE_VX_VY(vx, vy) rformat(0x5, (vx), (vy), 0x0)
-#define INST_LD_VX_BYTE(vx, byte) iformat(0x6, (vx), (byte))
-#define INST_ADD_VX_BYTE(vx, byte) iformat(0x7, (vx), (byte))
-#define INST_LD_VX_VY(vx, vy) rformat(0x8, (vx), (vy), 0x0)
-#define INST_OR_VX_VY(vx, vy) rformat(0x8, (vx), (vy), 0x1)
-#define INST_AND_VX_VY(vx, vy) rformat(0x8, (vx), (vy), 0x2)
-#define INST_XOR_VX_VY(vx, vy) rformat(0x8, (vx), (vy), 0x3)
-#define INST_ADD_VX_VY(vx, vy) rformat(0x8, (vx), (vy), 0x4)
-#define INST_SUB_VX_VY(vx, vy) rformat(0x8, (vx), (vy), 0x5)
-#define INST_SHR_VX(vx, vy) rformat(0x8, (vx), (vy), 0x6)
-#define INST_SUBN_VX_VY(vx, vy) rformat(0x8, (vx), (vy), 0x7)
-#define INST_SHL_VX(vx, vy) rformat(0x8, (vx), (vy), 0xE)
-#define INST_SNE_VX_VY(vx, vy) rformat(0x9, (vx), (vy), 0x0)
-#define INST_LD_I_ADDR(addr) aformat(0xA, (addr))
-#define INST_JMP_V0_ADDR(addr) aformat(0xB, (addr))
-#define INST_RND_VX_BYTE(vx, byte) iformat(0xC, (vx), (byte))
-#define INST_DRW_VX_VY_NIBBLE(vx, vy, nibble) rformat(0xD, (vx), (vy), (nibble))
-#define INST_SKP_VX(vx) iformat(0xE, (vx), 0x9E)
-#define INST_SKNP_VX(vx) iformat(0xE, (vx), 0xA1)
-#define INST_LD_VX_DT(vx) iformat(0xF, (vx), 0x07)
-#define INST_LD_VX_K(vx) iformat(0xF, (vx), 0x0A)
-#define INST_LD_DT_VX(vx) iformat(0xF, (vx), 0x15)
-#define INST_LD_ST_VX(vx) iformat(0xF, (vx), 0x18)
-#define INST_ADD_I_VX(vx) iformat(0xF, (vx), 0x1E)
-#define INST_LD_F_VX(vx) iformat(0xF, (vx), 0x29)
-#define INST_LD_B_VX(vx) iformat(0xF, (vx), 0x33)
-#define INST_LD_I_VX(vx) iformat(0xF, (vx), 0x55)
-#define INST_LD_VX_I(vx) iformat(0xF, (vx), 0x65)
+#define INST_SYS_ADDR(addr) aformat(OP_SYS_ADDR, (addr))
+#define INST_JMP_ADDR(addr) aformat(OP_JMP_ADDR, (addr))
+#define INST_CALL_ADDR(addr) aformat(OP_CALL_ADDR, (addr))
+#define INST_SE_VX_BYTE(vx, byte) iformat(OP_SE_VX_BYTE, (vx), (byte))
+#define INST_SNE_VX_BYTE(vx, byte) iformat(OP_SNE_VX_BYTE, (vx), (byte))
+#define INST_SE_VX_VY(vx, vy) rformat(OP_SE_VX_VY, (vx), (vy), IMM_SE_VX_VY)
+#define INST_LD_VX_BYTE(vx, byte) iformat(OP_LD_VX_BYTE, (vx), (byte))
+#define INST_ADD_VX_BYTE(vx, byte) iformat(OP_ADD_VX_BYTE, (vx), (byte))
+#define INST_LD_VX_VY(vx, vy) rformat(OP_LD_VX_VY, (vx), (vy), IMM_LD_VX_VY)
+#define INST_OR_VX_VY(vx, vy) rformat(OP_OR_VX_VY, (vx), (vy), IMM_OR_VX_VY)
+#define INST_AND_VX_VY(vx, vy) rformat(OP_AND_VX_VY, (vx), (vy), IMM_AND_VX_VY)
+#define INST_XOR_VX_VY(vx, vy) rformat(OP_XOR_VX_VY, (vx), (vy), IMM_XOR_VX_VY)
+#define INST_ADD_VX_VY(vx, vy) rformat(OP_ADD_VX_VY, (vx), (vy), IMM_AND_VX_VY)
+#define INST_SUB_VX_VY(vx, vy) rformat(OP_SUB_VX_VY, (vx), (vy), IMM_SUB_VX_VY)
+#define INST_SHR_VX(vx, vy) rformat(OP_SHR_VX, (vx), (vy), IMM_SHR_VX)
+#define INST_SUBN_VX_VY(vx, vy) rformat(OP_SUBN_VX_VY, (vx), (vy), IMM_SUBN_VX_VY)
+#define INST_SHL_VX(vx, vy) rformat(OP_SHL_VX, (vx), (vy), IMM_SHL_VX)
+#define INST_SNE_VX_VY(vx, vy) rformat(OP_SNE_VX_VY, (vx), (vy), IMM_SNE_VX_VY)
+#define INST_LD_I_ADDR(addr) aformat(OP_LD_I_ADDR, (addr))
+#define INST_JMP_V0_ADDR(addr) aformat(OP_JMP_V0_ADDR, (addr))
+#define INST_RND_VX_BYTE(vx, byte) iformat(OP_RND_VX_BYTE, (vx), (byte))
+#define INST_DRW_VX_VY_NIBBLE(vx, vy, nibble) rformat(OP_DRW_VX_VY_NIBBLE, (vx), (vy), (nibble))
+#define INST_SKP_VX(vx) iformat(OP_SKP_VX, (vx), IMM_SKP_VX)
+#define INST_SKNP_VX(vx) iformat(OP_SKNP_VX, (vx), IMM_SKNP_VX)
+#define INST_LD_VX_DT(vx) iformat(OP_LD_VX_DT, (vx), IMM_LD_VX_DT)
+#define INST_LD_VX_K(vx) iformat(OP_LD_VX_K, (vx), IMM_LD_VX_K)
+#define INST_LD_DT_VX(vx) iformat(OP_LD_DT_VX, (vx), IMM_LD_DT_VX)
+#define INST_LD_ST_VX(vx) iformat(IMM_LD_ST_VX, (vx), IMM_LD_ST_VX)
+#define INST_ADD_I_VX(vx) iformat(OP_ADD_I_VX, (vx), IMM_ADD_I_VX)
+#define INST_LD_F_VX(vx) iformat(OP_LD_F_VX, (vx), IMM_LD_F_VX)
+#define INST_LD_B_VX(vx) iformat(OP_LD_B_VX, (vx), IMM_LD_B_VX)
+#define INST_LD_I_VX(vx) iformat(OP_LD_I_VX, (vx), IMM_LD_I_VX)
+#define INST_LD_VX_I(vx) iformat(OP_LD_VX_I, (vx), IMM_LD_VX_I)
 
 sds inst2str(Chip8Instruction instruction);
 void print_instruction(Chip8Instruction instruction, Chip8InstructionFormat format);
