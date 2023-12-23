@@ -23,7 +23,7 @@ int parse_num(char *str) {
 	int num = 0;
 	char *digit = str;
 	while (*digit >= '0' && *digit <= '9') {
-		num = num * 10 + (*digit - '0');
+		num = num * 10 + *digit - '0';
 		digit++;
 	}
 	return num;
@@ -61,6 +61,7 @@ Chip8Instruction parse_line(char *line, size_t line_num, char **out_label) {
 		++opcode;
 	}
 
+	// TODO: Handle opcodes which are too short/long
 	uint8_t opcode_len = opcode - line;
 	char *args = trim(opcode);
 	opcode = line;
@@ -209,6 +210,9 @@ Chip8Instruction parse_line(char *line, size_t line_num, char **out_label) {
 	return instruction;
 }
 
+// TODO: Could be split up into a proper lexer + parser, rather
+// than this current lexerless parsing. Would likely make it
+// more robust.
 uint8_t *assemble(char *source_filename) {
 	// TODO: Debugging symbols
 	bool valid = true;

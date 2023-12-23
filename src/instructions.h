@@ -109,6 +109,12 @@ static inline Chip8Instruction aformat(uint8_t opcode, uint16_t addr) {
 	return instruction;
 }
 
+// TODO: Write some defines for each instruction's opcode and immediate
+// values to have consistency between INST macros and the instruction_type()
+// function? E.g.,
+// #define OP_LD_VX_VY 0x8
+// #define IMM_LD_VX_VY 0x0
+// ...
 #define INST_CLS \
 	(Chip8Instruction) { \
 		.raw = 0x00E0 \
