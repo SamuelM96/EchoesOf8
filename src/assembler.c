@@ -65,214 +65,145 @@ Chip8Instruction parse_line(char *line, size_t line_num, char **out_label) {
 	char *args = trim(opcode);
 	opcode = line;
 
+	// NOTE: Could be switched out for nested switch statements,
+	// but the number of keywords is tiny that I doubt there'll
+	// be many benfits over simple strncmp.
 	Chip8Instruction instruction;
 	if (strncmp("CLS", opcode, opcode_len) == 0) {
-		instruction.raw = 0x00E0;
+		instruction = INST_CLS;
 	} else if (strncmp("RET", opcode, opcode_len) == 0) {
-		instruction.raw = 0x00EE;
+		instruction = INST_RET;
 	} else if (strncmp("SYS", opcode, opcode_len) == 0) {
-		instruction.aformat.opcode = 0x0;
 		if (*args < '0' || *args > '9') {
 			*out_label = args;
 		} else {
-			instruction.aformat.addr = strtol(args, NULL, 0);
+			instruction = INST_SYS_ADDR(strtol(args, NULL, 0));
 		}
 	} else if (strncmp("JMP", opcode, opcode_len) == 0) {
 		if (*args == 'V') {
-			// Bnnn - JMP V0, addr
-			instruction.aformat.opcode = 0xB;
 			args = next_arg(args);
-		} else {
-			// 1nnn - JMP addr
-			instruction.aformat.opcode = 0x1;
 		}
+
+		uint16_t addr;
 		if (*args < '0' || *args > '9') {
 			*out_label = args;
+			addr = 0;
 		} else {
-			instruction.aformat.addr = strtol(args, NULL, 0);
+			addr = strtol(args, NULL, 0);
+		}
+
+		if (*args == 'V') {
+			instruction = INST_JMP_V0_ADDR(addr);
+		} else {
+			instruction = INST_JMP_ADDR(addr);
 		}
 	} else if (strncmp("CALL", opcode, opcode_len) == 0) {
-		instruction.aformat.opcode = 0x2;
+		uint16_t addr;
 		if (*args < '0' || *args > '9') {
 			*out_label = args;
+			addr = 0;
 		} else {
-			instruction.aformat.addr = strtol(args, NULL, 0);
+			addr = strtol(args, NULL, 0);
 		}
+		instruction = INST_CALL_ADDR(addr);
 	} else if (strncmp("SE", opcode, opcode_len) == 0) {
-		uint8_t xreg = parse_reg(args, line_num, line);
+		uint8_t vx = parse_reg(args, line_num, line);
 		char *arg2 = next_arg(args);
 		if (*arg2 == 'V') {
-			// 5xy0 - SE Vx, Vy
-			instruction.rformat.opcode = 0x5;
-			instruction.rformat.rx = xreg;
-			instruction.rformat.ry = parse_reg(arg2, line_num, line);
-			instruction.rformat.imm = 0x0;
+			instruction = INST_SE_VX_VY(vx, parse_reg(arg2, line_num, line));
 		} else {
-			// 3xkk - SE Vx, byte
-			instruction.iformat.opcode = 0x6;
-			instruction.iformat.reg = xreg;
-			instruction.iformat.imm = strtol(arg2, NULL, 0);
+			instruction = INST_SE_VX_BYTE(vx, strtol(arg2, NULL, 0));
 		}
 	} else if (strncmp("SNE", opcode, opcode_len) == 0) {
-		uint8_t xreg = parse_reg(args, line_num, line);
+		uint8_t vx = parse_reg(args, line_num, line);
 		char *arg2 = next_arg(args);
 		if (*arg2 == 'V') {
-			// 9xy0 - SNE Vx, Vy
-			instruction.rformat.opcode = 0x9;
-			instruction.rformat.rx = xreg;
-			instruction.rformat.ry = parse_reg(arg2, line_num, line);
-			instruction.rformat.imm = 0x0;
+			instruction = INST_SNE_VX_VY(vx, parse_reg(arg2, line_num, line));
 		} else {
-			// 4xkk - SNE Vx, byte
-			instruction.iformat.opcode = 0x4;
-			instruction.iformat.reg = xreg;
-			instruction.iformat.imm = strtol(arg2, NULL, 0);
+			instruction = INST_SNE_VX_BYTE(vx, strtol(arg2, NULL, 0));
 		}
 	} else if (strncmp("LD", opcode, opcode_len) == 0) {
 		if (*args == 'I') {
-			// Annn - LD I, addr
-			instruction.aformat.opcode = 0xA;
+			uint16_t addr;
 			args = next_arg(args);
 			if (*args < '0' || *args > '9') {
 				*out_label = args;
+				addr = 0;
 			} else {
-				instruction.aformat.addr = strtol(args, NULL, 0);
+				addr = strtol(args, NULL, 0);
 			}
+			instruction = INST_LD_I_ADDR(addr);
 		} else if (*args == 'D') {
-			// Fx15 - LD DT, Vx
-			instruction.iformat.opcode = 0xF;
-			instruction.iformat.imm = 0x15;
-			instruction.iformat.reg = parse_reg(next_arg(args), line_num, line);
+			instruction = INST_LD_DT_VX(parse_reg(next_arg(args), line_num, line));
 		} else if (*args == 'S') {
-			// Fx18 - LD ST, Vx
-			instruction.iformat.opcode = 0xF;
-			instruction.iformat.imm = 0x18;
-			instruction.iformat.reg = parse_reg(next_arg(args), line_num, line);
+			instruction = INST_LD_ST_VX(parse_reg(next_arg(args), line_num, line));
 		} else if (*args == 'F') {
-			// Fx29 - LD F, Vx
-			instruction.iformat.opcode = 0xF;
-			instruction.iformat.imm = 0x29;
-			instruction.iformat.reg = parse_reg(next_arg(args), line_num, line);
+			instruction = INST_LD_F_VX(parse_reg(next_arg(args), line_num, line));
 		} else if (*args == 'B') {
-			// Fx33 - LD B, Vx
-			instruction.iformat.opcode = 0xF;
-			instruction.iformat.imm = 0x33;
-			instruction.iformat.reg = parse_reg(next_arg(args), line_num, line);
+			instruction = INST_LD_B_VX(parse_reg(next_arg(args), line_num, line));
 		} else if (*args == '[') {
-			// Fx55 - LD [I], Vx
-			instruction.iformat.opcode = 0xF;
-			instruction.iformat.imm = 0x55;
-			instruction.iformat.reg = parse_reg(next_arg(args), line_num, line);
+			instruction = INST_LD_I_VX(parse_reg(next_arg(args), line_num, line));
 		} else if (*args == 'V') {
-			instruction.rformat.rx = parse_reg(args, line_num, line);
+			uint8_t vx = parse_reg(args, line_num, line);
 			char *arg2 = next_arg(args);
 			if (*arg2 == 'V') {
-				// 8xy0 - LD Vx, Vy
-				instruction.rformat.opcode = 0x8;
-				instruction.rformat.ry = parse_reg(arg2, line_num, line);
+				instruction = INST_LD_VX_VY(vx, parse_reg(arg2, line_num, line));
 			} else if (*arg2 == 'D') {
-				// Fx07 - LD Vx, DT
-				instruction.iformat.opcode = 0xF;
-				instruction.iformat.imm = 0x07;
+				instruction = INST_LD_VX_DT(vx);
 			} else if (*arg2 == '[') {
-				// Fx65 - LD Vx, [I]
-				instruction.iformat.opcode = 0xF;
-				instruction.iformat.imm = 0x65;
+				instruction = INST_LD_VX_I(vx);
 			} else if (*arg2 == 'K') {
-				// Fx0A - LD Vx, K
-				instruction.iformat.opcode = 0xF;
-				instruction.iformat.imm = 0x0A;
+				instruction = INST_LD_VX_K(vx);
 			} else {
-				// 6xkk - LD Vx, byte
-				instruction.iformat.opcode = 0x6;
-				instruction.iformat.imm = strtol(arg2, NULL, 0);
+				instruction = INST_LD_VX_BYTE(vx, strtol(arg2, NULL, 0));
 			}
 		}
 	} else if (strncmp("ADD", opcode, opcode_len) == 0) {
 		char *arg2 = next_arg(args);
 		if (*arg2 == 'V') {
 			if (*args == 'V') {
-				// 8xy4 - ADD Vx, Vy
-				instruction.rformat.opcode = 0x8;
-				instruction.rformat.rx = parse_reg(args, line_num, line);
-				instruction.rformat.ry = parse_reg(arg2, line_num, line);
-				instruction.rformat.imm = 0x4;
+				instruction = INST_ADD_VX_VY(parse_reg(args, line_num, line),
+							     parse_reg(arg2, line_num, line));
 			} else {
-				// Fx1E - ADD I, Vx
-				instruction.iformat.opcode = 0xF;
-				instruction.iformat.imm = 0x1E;
-				instruction.iformat.reg = parse_reg(arg2, line_num, line);
+				instruction = INST_ADD_I_VX(parse_reg(arg2, line_num, line));
 			}
 		} else {
-			// 7xkk - ADD Vx, byte
-			instruction.iformat.opcode = 0x7;
-			instruction.iformat.reg = parse_reg(args, line_num, line);
-			instruction.iformat.imm = strtol(arg2, NULL, 0);
+			instruction = INST_ADD_VX_BYTE(parse_reg(args, line_num, line),
+						       strtol(arg2, NULL, 0));
 		}
 	} else if (strncmp("OR", opcode, opcode_len) == 0) {
-		// 8xy1 - OR Vx, Vy
-		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args, line_num, line);
-		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
-		instruction.rformat.imm = 0x1;
+		instruction = INST_OR_VX_VY(parse_reg(args, line_num, line),
+					    parse_reg(next_arg(args), line_num, line));
 	} else if (strncmp("AND", opcode, opcode_len) == 0) {
-		// 8xy2 - AND Vx, Vy
-		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args, line_num, line);
-		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
-		instruction.rformat.imm = 0x2;
+		instruction = INST_AND_VX_VY(parse_reg(args, line_num, line),
+					     parse_reg(next_arg(args), line_num, line));
 	} else if (strncmp("XOR", opcode, opcode_len) == 0) {
-		// 8xy3 - XOR Vx, Vy
-		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args, line_num, line);
-		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
-		instruction.rformat.imm = 0x3;
+		instruction = INST_XOR_VX_VY(parse_reg(args, line_num, line),
+					     parse_reg(next_arg(args), line_num, line));
 	} else if (strncmp("SUB", opcode, opcode_len) == 0) {
-		// 8xy5 - SUB Vx, Vy
-		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args, line_num, line);
-		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
-		instruction.rformat.imm = 0x5;
+		instruction = INST_SUB_VX_VY(parse_reg(args, line_num, line),
+					     parse_reg(next_arg(args), line_num, line));
 	} else if (strncmp("SHR", opcode, opcode_len) == 0) {
-		// 8xy6 - SHR Vx {, Vy}
-		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args, line_num, line);
-		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
-		instruction.rformat.imm = 0x6;
+		instruction = INST_SHR_VX(parse_reg(args, line_num, line),
+					  parse_reg(next_arg(args), line_num, line));
 	} else if (strncmp("SUBN", opcode, opcode_len) == 0) {
-		// 8xy7 - SUBN Vx, Vy
-		instruction.rformat.opcode = 0x8;
-		instruction.rformat.rx = parse_reg(args, line_num, line);
-		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
-		instruction.rformat.imm = 0x7;
+		instruction = INST_SUBN_VX_VY(parse_reg(args, line_num, line),
+					      parse_reg(next_arg(args), line_num, line));
 	} else if (strncmp("SHL", opcode, opcode_len) == 0) {
-		// 8xyE - SHL Vx {, Vy}
-		instruction.rformat.opcode = 8;
-		instruction.rformat.rx = parse_reg(args, line_num, line);
-		instruction.rformat.ry = parse_reg(next_arg(args), line_num, line);
-		instruction.rformat.imm = 0xE;
+		instruction = INST_SHL_VX(parse_reg(args, line_num, line),
+					  parse_reg(next_arg(args), line_num, line));
 	} else if (strncmp("RND", opcode, opcode_len) == 0) {
-		// Cxkk - RND Vx, byte
-		instruction.iformat.opcode = 0xC;
-		instruction.iformat.reg = parse_reg(args, line_num, line);
-		instruction.iformat.imm = strtol(next_arg(args), NULL, 0);
+		instruction = INST_RND_VX_BYTE(parse_reg(args, line_num, line),
+					       strtol(next_arg(args), NULL, 0));
 	} else if (strncmp("DRW", opcode, opcode_len) == 0) {
-		// Dxyn - DRW Vx, Vy, nibble
-		instruction.rformat.opcode = 0xD;
-		instruction.rformat.rx = parse_reg(args, line_num, line);
 		char *arg2 = next_arg(args);
-		instruction.rformat.ry = parse_reg(arg2, line_num, line);
-		instruction.rformat.imm = parse_num(next_arg(arg2));
+		instruction = INST_DRW_VX_VY_NIBBLE(parse_reg(args, line_num, line),
+						    parse_reg(arg2, line_num, line),
+						    parse_num(next_arg(arg2)));
 	} else if (strncmp("SKP", opcode, opcode_len) == 0) {
-		// Ex9E - SKP Vx
-		instruction.iformat.opcode = 0xE;
-		instruction.iformat.reg = parse_reg(args, line_num, line);
-		instruction.iformat.imm = 0x9E;
+		instruction = INST_SKP_VX(parse_reg(args, line_num, line));
 	} else if (strncmp("SKNP", opcode, opcode_len) == 0) {
-		// ExA1 - SKNP Vx
-		instruction.iformat.opcode = 0xE;
-		instruction.iformat.reg = parse_reg(args, line_num, line);
-		instruction.iformat.imm = 0xA1;
+		instruction = INST_SKNP_VX(parse_reg(args, line_num, line));
 	}
 
 	return instruction;
