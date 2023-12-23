@@ -121,7 +121,7 @@ static inline Chip8Instruction aformat(uint8_t opcode, uint16_t addr) {
 	}
 #define INST_RET \
 	(Chip8Instruction) { \
-		.raw = 0x00E0 \
+		.raw = 0x00EE \
 	}
 #define INST_SYS_ADDR(addr) aformat(0x0, (addr))
 #define INST_JMP_ADDR(addr) aformat(0x1, (addr))
