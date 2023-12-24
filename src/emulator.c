@@ -273,7 +273,8 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 				}
 			}
 
-			if (!debug_state->inst_breakpoint_hit) {
+			if (!(debug_state->inst_breakpoint_hit ||
+			      debug_state->memory_breakpoint_hit)) {
 				handle_timers(&emulator);
 			}
 		}
@@ -287,7 +288,6 @@ void emulate(uint8_t *rom, size_t rom_size, bool debug, char *rom_path) {
 		} while (elapsed_time < frame_time);
 	}
 
-	free_graphics(&emulator);
 	free_emulator(&emulator);
 }
 
@@ -580,7 +580,8 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 			uint16_t addr = emulator->vi + i;
 			emulator->memory[addr] = emulator->registers[i];
 			debug_state->memory_modifications[addr] = true;
-			if (debug_state->memory_breakpoints[addr]) {
+			if (!debug_state->skip_breakpoints &&
+			    debug_state->memory_breakpoints[addr]) {
 				debug_state->debug_mode = true;
 				debug_state->memory_breakpoint_hit = true;
 			}
@@ -593,7 +594,8 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 		for (int i = 0; i <= instruction.iformat.reg; ++i) {
 			uint16_t addr = emulator->vi + i;
 			emulator->registers[i] = emulator->memory[addr];
-			if (debug_state->memory_breakpoints[addr]) {
+			if (!debug_state->skip_breakpoints &&
+			    debug_state->memory_breakpoints[addr]) {
 				debug_state->debug_mode = true;
 				debug_state->memory_breakpoint_hit = true;
 			}
@@ -1383,6 +1385,7 @@ void reset_state(EmulatorState *emulator) {
 }
 
 void free_emulator(EmulatorState *emulator) {
+	free_graphics(emulator);
 	if (emulator->rom) {
 		free(emulator->rom);
 	}
