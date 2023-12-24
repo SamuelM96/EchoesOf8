@@ -151,6 +151,7 @@ typedef struct EmulatorState {
 	uint8_t configuration;
 
 	CyclesPerFrameType cycles_per_frame;
+	uint64_t cycle_count;
 
 	Beeper beeper;
 
@@ -341,6 +342,7 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 	}
 
 	DebugState *debug_state = &emulator->debug_state;
+	emulator->cycle_count++;
 
 	switch (instruction_type(instruction)) {
 	case CHIP8_CLS:
@@ -482,6 +484,7 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 		    !emulator->display_interrupted) {
 			emulator->display_interrupted = true;
 			emulator->pc -= 2;
+			emulator->cycle_count--;
 			break;
 		}
 		bool flag = false;
@@ -610,7 +613,6 @@ bool execute(EmulatorState *emulator, Chip8Instruction instruction) {
 }
 
 void handle_timers(EmulatorState *emulator) {
-	// TODO: Handle timers in debug mode
 	if (emulator->dt > 0) {
 		emulator->dt--;
 	}
@@ -659,6 +661,11 @@ bool handle_input(EmulatorState *emulator) {
 				case SDL_SCANCODE_N:
 					if (debug_state->debug_mode) {
 						execute(emulator, fetch_next(emulator, true));
+						if (emulator->cycle_count %
+							    emulator->cycles_per_frame ==
+						    0) {
+							handle_timers(emulator);
+						}
 					}
 					break;
 				default:

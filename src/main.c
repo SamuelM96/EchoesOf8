@@ -79,7 +79,7 @@ int main(int argc, char *argv[]) {
 			return EXIT_FAILURE;
 		}
 		// TODO: Implement decompiler
-		printf("!!! NOT IMPLEMENTED !!!\n");
+		fprintf(stderr, "!!! NOT IMPLEMENTED !!!\n");
 		return EXIT_FAILURE;
 	} else if (strcmp(argv[1], "assemble") == 0) {
 		if (argc != 4) {
@@ -98,7 +98,7 @@ int main(int argc, char *argv[]) {
 			return EXIT_FAILURE;
 		}
 		// TODO: Implement compiler
-		printf("!!! NOT IMPLEMENTED !!!\n");
+		fprintf(stderr, "!!! NOT IMPLEMENTED !!!\n");
 		return EXIT_FAILURE;
 	} else if (strcmp(argv[1], "emulate") == 0) {
 		if (argc != 3 && argc != 4) {
